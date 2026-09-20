@@ -1,6 +1,6 @@
 ---
 description: Run a one-shot prompt through the Antigravity CLI and return its output verbatim
-argument-hint: "[--model <alias>] <prompt>"
+argument-hint: "[--model <alias|id>] [--effort low|medium|high] <prompt>"
 allowed-tools: Bash(bash:*)
 ---
 
@@ -16,29 +16,42 @@ $ARGUMENTS
 
 ## How to invoke
 
-If the user's text begins with `--model <alias>` (e.g. `--model opus rest of
-prompt…`), lift the flag and its value out of the prompt and place them
-**before** the prompt argument to the wrapper. Anything else stays as the
-prompt body.
+If the user's text begins with `--model <value>` and/or `--effort <level>`
+(e.g. `--model opus rest of prompt…`), lift those flags and their values out
+of the prompt and place them **before** the prompt argument to the wrapper.
+Anything else stays as the prompt body.
 
 Use the `Bash` tool to run one of:
 
 ```
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" ask "<prompt>"
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" ask --model <alias> "<prompt>"
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" ask --model <value> "<prompt>"
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" ask --model <value> --effort <level> "<prompt>"
 ```
 
 …substituting `<prompt>` with the exact text above, quoted as one shell
 argument so characters like `"`, `$`, `;`, `\` and backticks cannot break
 out.
 
-Aliases for `<alias>`: `flash-low`, `flash-medium`, `flash`, `pro-low`,
-`pro`, `sonnet`, `opus`, `gpt-oss`. The canonical TUI strings (e.g.
-`"Claude Opus 4.6 (Thinking)"`) are also accepted. Run `/agy:help` for the
-full table.
+## Choosing `--model`
+
+`--model` accepts, in this order of preference:
+
+- an **intent alias** — `fast`, `balanced`, `deep`, `flash`, `pro`, `sonnet`,
+  `opus`, `gpt-oss` and friends. These name a family and effort level, not a
+  version, so they follow the catalogue as Google ships new models.
+- an **exact model id or display name** from `/agy:models`, when the user
+  wants a specific version pinned.
+- anything else, which is forwarded to `agy` untouched — this is how custom
+  models configured in the user's agy settings keep working.
+
+Do not recite a model list from memory. Run `/agy:models` when the user asks
+what is available, or when an alias does not resolve.
 
 Notes:
 
+- The wrapper prints one `[wrapper] model: <alias> -> <id>` line on stderr so
+  the user can see which concrete model an alias selected. Leave it in.
 - If the wrapper reports `agy is not installed` or `not authenticated`, stop
   and tell the user to run `/agy:setup`.
 - If the user's request is empty, ask what they want to ask Antigravity.

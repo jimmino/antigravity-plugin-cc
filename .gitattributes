@@ -1,0 +1,11 @@
+# The wrapper, the test harness and the CLI stub are all Bash. A CRLF checkout
+# on Windows makes them fail with `bad interpreter: ...^M`, so pin them to LF
+# regardless of the developer's core.autocrlf.
+* text=auto eol=lf
+
+*.sh            text eol=lf
+tests/fixtures/fake-agy text eol=lf
+*.tsv           text eol=lf
+*.conf          text eol=lf
+
+*.png           binary

@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# Hermetic stand-in for the real `agy` binary.
+#
+# Env knobs:
+#   FAKE_AGY_MODE        new (default) | old-no-model | old-no-models | no-effort
+#   FAKE_AGY_CATALOG     path to a TSV catalogue served by `models`
+#   FAKE_AGY_JSON        1 => `models --output-format json` is supported
+#   FAKE_AGY_ARGV_LOG    path; every non-help invocation appends its argv here
+#   FAKE_AGY_SETTINGS    path; if set, the run echoes that file's "model" value
+#   FAKE_AGY_EXIT        exit code for a prompt run (default 0)
+#   FAKE_AGY_STDOUT      canned stdout for a prompt run
+#   FAKE_AGY_MODELS_FAIL 1 => `models` fails (simulates offline)
+set -u
+
+mode="${FAKE_AGY_MODE:-new}"
+
+print_help() {
+  echo "Usage of fake-agy:"
+  echo "  --add-dir                       Add a directory to the workspace"
+  case "$mode" in
+    old-no-model) : ;;
+    *)            echo "  --model                         Model for the current CLI session" ;;
+  esac
+  case "$mode" in
+    old-no-model|no-effort) : ;;
+    *)                      echo "  --effort                        Reasoning effort (low|medium|high)" ;;
+  esac
+  echo "  -p                              Short alias for --print"
+  echo "  --print                         Run a single prompt non-interactively"
+  echo ""
+  echo "Available subcommands:"
+  echo "  changelog       Show changelog and release notes"
+  case "$mode" in
+    old-no-models|old-no-model) : ;;
+    *)                          echo "  models          List available models" ;;
+  esac
+  echo "  update          Update CLI"
+}
+
+case "${1:-}" in
+  --help|-h) print_help; exit 0 ;;
+  --version) echo "9.9.9-fake"; exit 0 ;;
+  models)
+    shift
+    if [ "${1:-}" = "--output-format" ]; then
+      if [ "${FAKE_AGY_JSON:-0}" != "1" ]; then
+        echo "Usage: fake-agy models [flags]" >&2
+        echo "Error: flags provided but not defined: -output-format" >&2
+        exit 1
+      fi
+      shift 2>/dev/null || true
+      shift 2>/dev/null || true
+      awk -F'\t' 'BEGIN{print "{\"models\":["} NF>=2{ if(n++)print ","; printf "{\"id\":\"%s\",\"label\":\"%s\"}", $1, $2 } END{print "]}"}' \
+        "${FAKE_AGY_CATALOG:?FAKE_AGY_CATALOG unset}"
+      exit 0
+    fi
+    if [ "${FAKE_AGY_MODELS_FAIL:-0}" = "1" ]; then
+      echo "error: could not reach model service" >&2
+      exit 1
+    fi
+    # Real agy writes a spinner to stderr; mimic it so parsing is exercised.
+    printf '\033[2K\r⠋ Fetching available models...' >&2
+    cat "${FAKE_AGY_CATALOG:?FAKE_AGY_CATALOG unset}"
+    exit 0
+    ;;
+esac
+
+if [ -n "${FAKE_AGY_ARGV_LOG:-}" ]; then
+  : > "$FAKE_AGY_ARGV_LOG"
+  for a in "$@"; do printf '%s\n' "$a" >> "$FAKE_AGY_ARGV_LOG"; done
+fi
+
+if [ -n "${FAKE_AGY_SETTINGS:-}" ] && [ -f "${FAKE_AGY_SETTINGS}" ]; then
+  model_now="$(grep -oE '"model"[[:space:]]*:[[:space:]]*"[^"]*"' "$FAKE_AGY_SETTINGS" \
+    | sed -E 's/.*:[[:space:]]*"([^"]*)".*/\1/' | head -n1)"
+  echo "SETTINGS_MODEL_DURING_RUN=${model_now}"
+fi
+
+printf '%s\n' "${FAKE_AGY_STDOUT:-fake-agy-ok}"
+exit "${FAKE_AGY_EXIT:-0}"

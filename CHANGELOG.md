@@ -5,6 +5,70 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-09-20
+
+### Changed
+- **Model selection is now discovered at runtime instead of hardcoded.**
+  `agy models` is the source of truth. The wrapper caches that catalogue
+  (1h TTL, `AGY_MODELS_CACHE_TTL`) and resolves every `--model` value
+  against it. No model name is compiled into the plugin any more.
+- Built-in aliases now name a **family and effort** rather than a version:
+  `flash` means "newest Flash at high effort", `deep` means "newest Pro at
+  high effort". A new Gemini or Claude generation is picked up with no
+  plugin release.
+- `--model` is passed to `agy --model` natively, so a call no longer
+  rewrites `~/.gemini/antigravity-cli/settings.json` at all. The old
+  lock-and-patch path is kept purely as an automatic fallback for `agy`
+  builds that predate the flag, detected from `agy --help`.
+- An unrecognised `--model` value is now forwarded to `agy` verbatim
+  (with a note on stderr) instead of failing with exit 64. This is what
+  makes custom models from `customModelsConfig` usable, and it lets `agy`
+  — which knows the real catalogue — produce the error.
+
+### Fixed
+- **Every `flash*` alias selected the wrong model.** They mapped to
+  `Gemini 3.5 Flash (…)`, which no longer exists; because the old code
+  wrote that name into `settings.json` rather than passing it as a flag,
+  `agy` silently fell back to the saved default instead of erroring. A
+  `--model flash` call was quietly served by `Gemini 3.1 Pro (High)` —
+  slower and more expensive than requested, with no indication.
+- `/agy:image`: when `agy`'s reply contained no image path, the fallback
+  `grep` returned 1 and, under `set -o pipefail`, aborted the script
+  before the "no image path was found" warning could print. The command
+  died silently instead of explaining itself.
+- `/agy:setup` referred to `/antigravity:ask` and friends; those commands
+  were renamed to `/agy:*` in 0.3.0.
+
+### Added
+- `/agy:models [--refresh]` — list the models the installed `agy` build
+  actually offers, with the alias mapping.
+- `--effort low|medium|high` on `/agy:ask` and `/agy:review`, forwarded to
+  `agy --effort` when the installed build supports it.
+- Tier aliases `fast` / `balanced` / `deep`, plus `haiku`, `gemini` and
+  `claude` family aliases.
+- User-defined aliases in `~/.config/agy-plugin/aliases.conf`
+  (`name = target`, chainable, cycle-detected). Read from user config
+  only — never from the checked-out project, so a repository cannot
+  redirect which model your prompts go to.
+- `[wrapper] model: <alias> -> <id>` on stderr so an alias's choice stays
+  auditable. Silence with `AGY_QUIET=1`.
+- `nativeModelFlag` and `modelsSubcommand` in `/agy:setup`'s JSON, so the
+  capability path in use is visible.
+- A hermetic test suite (`bash tests/run-tests.sh`): 73 tests against a
+  stub CLI, covering catalogue parsing and caching, alias resolution
+  against a *hypothetical future catalogue*, user aliases, the legacy
+  fallback, argument-injection safety, and image-path hardening. Runs in
+  CI on Linux and macOS alongside shellcheck.
+
+### Security
+- `/agy:image` no longer copies an arbitrary path that the model printed
+  after `IMAGE_PATH:` — only paths ending in an image extension are
+  honoured, so a prompt-injected reply cannot use `--output` to copy an
+  unrelated file.
+- Catalogue output and alias-file values are stripped of control
+  characters and never evaluated by the shell.
+- The catalogue cache is written atomically into a `0700` directory.
+
 ## [0.4.1] - 2026-05-27
 
 ### Fixed
