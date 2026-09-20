@@ -81,17 +81,29 @@ agy_help_text() {
   printf '%s' "$_AGY_HELP_CACHE"
 }
 
+# Deliberately a here-string rather than `agy_help_text | grep -q`: `grep -q`
+# exits on the first match, and under `set -o pipefail` the resulting SIGPIPE
+# on the writer makes the whole pipeline report failure even though the
+# pattern matched. A false negative here silently downgrades the wrapper to
+# the settings.json-patching path, so this probe must not be racy.
+_agy_help_has() {
+  local help
+  help="$(agy_help_text 2>/dev/null || true)"
+  [ -n "$help" ] || return 1
+  grep -qE "$1" <<<"$help"
+}
+
 agy_supports_model_flag() {
   [ "${AGY_FORCE_LEGACY_MODEL:-0}" = "1" ] && return 1
-  agy_help_text 2>/dev/null | grep -qE '^[[:space:]]*--model([[:space:]]|$)'
+  _agy_help_has '^[[:space:]]*--model([[:space:]]|$)'
 }
 
 agy_supports_effort_flag() {
-  agy_help_text 2>/dev/null | grep -qE '^[[:space:]]*--effort([[:space:]]|$)'
+  _agy_help_has '^[[:space:]]*--effort([[:space:]]|$)'
 }
 
 agy_supports_models_cmd() {
-  agy_help_text 2>/dev/null | grep -qE '^[[:space:]]*models([[:space:]]|$)'
+  _agy_help_has '^[[:space:]]*models([[:space:]]|$)'
 }
 
 # ------------------------------------------------------------ catalogue ----
@@ -880,10 +892,16 @@ The IMAGE_PATH line is required — the calling wrapper parses it to locate the 
     | tail -n1 || true)"
 
   # The path comes from model output, so only ever act on an image file —
-  # never copy an arbitrary path the model happened to print.
-  if [ -n "$src" ] && ! printf '%s' "$src" | grep -qiE '\.(png|jpg|jpeg|webp)$'; then
-    echo "[wrapper] warning: ignoring IMAGE_PATH '$src' — not an image file." >&2
-    src=""
+  # never copy an arbitrary path the model happened to print. A `case` rather
+  # than a pipe to `grep -q`, which can report failure via SIGPIPE under
+  # `set -o pipefail` and reject a perfectly good path.
+  if [ -n "$src" ]; then
+    case "$(_lower "$src")" in
+      *.png|*.jpg|*.jpeg|*.webp) : ;;
+      *)
+        echo "[wrapper] warning: ignoring IMAGE_PATH '$src' — not an image file." >&2
+        src="" ;;
+    esac
   fi
 
   # Fallback when the model skips the marker line. The `|| true` guards matter:

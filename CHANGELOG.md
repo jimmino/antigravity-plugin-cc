@@ -38,6 +38,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   died silently instead of explaining itself.
 - `/agy:setup` referred to `/antigravity:ask` and friends; those commands
   were renamed to `/agy:*` in 0.3.0.
+- The `agy --help` capability probes used `agy_help_text | grep -q`. `grep -q`
+  exits on the first match, and under `set -o pipefail` the writer's SIGPIPE
+  makes the pipeline report failure *even though the pattern matched*. A
+  false negative there would have silently downgraded the wrapper to the
+  settings.json-patching path against a modern `agy`. Only latent today —
+  `agy --help` fits a pipe buffer — but the same pattern raced for real in
+  the test harness on macOS. Replaced with here-strings; there is a
+  regression test using a deliberately oversized help output.
+- `/agy:image`'s image-extension guard had the same shape and could have
+  rejected a perfectly good generated path. Now a `case`.
 
 ### Added
 - `/agy:models [--refresh]` — list the models the installed `agy` build

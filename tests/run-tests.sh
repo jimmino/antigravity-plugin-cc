@@ -110,10 +110,16 @@ run_wrapper() {
 
 argv_log() { cat "$FAKE_AGY_ARGV_LOG" 2>/dev/null || true; }
 
-# Joined argv, newline-delimited, for substring assertions.
+# Exact-line match against the recorded argv.
+#
+# Reads the file directly instead of piping into `grep -Fxq`: grep exits on
+# the first match, and with `set -o pipefail` the writer's SIGPIPE makes the
+# pipeline report failure even on a match. That raced on macOS and failed
+# whichever assertions happened to lose.
 argv_has() {
   local needle="$1"
-  printf '%s\n' "$(argv_log)" | grep -Fxq -- "$needle"
+  [ -f "${FAKE_AGY_ARGV_LOG:-}" ] || return 1
+  grep -Fxq -- "$needle" "$FAKE_AGY_ARGV_LOG"
 }
 
 settings_model() {
@@ -123,7 +129,7 @@ settings_model() {
 
 it() {
   local name="$1"; shift
-  if [ -n "$FILTER" ] && ! printf '%s' "$name" | grep -qi -- "$FILTER"; then
+  if [ -n "$FILTER" ] && ! grep -qi -- "$FILTER" <<<"$name"; then
     SKIP=$((SKIP + 1)); return 0
   fi
   setup_sandbox
@@ -674,6 +680,62 @@ t_catalogue_content_is_never_executed() {
   if [ -e "$SANDBOX/PWNMARK2" ]; then fail_msg "catalogue content must never be evaluated by the shell"; fi
 }
 
+
+t_capability_probe_is_not_racy() {
+  # `agy --help` is normally small enough to fit a pipe buffer, which hid a
+  # SIGPIPE-under-pipefail bug in the probe. A build with verbose help must
+  # still be detected as supporting --model, or the wrapper silently starts
+  # rewriting settings.json.
+  {
+    printf 'Usage of fake-agy:
+'
+    i=0; while [ "$i" -lt 4000 ]; do printf '  --filler-%s  padding to overflow the pipe buffer
+' "$i"; i=$((i+1)); done
+    printf '  --model                         Model for the current CLI session
+'
+    printf '  --effort                        Reasoning effort (low|medium|high)
+'
+    printf '  -p                              Short alias for --print
+'
+    printf '
+Available subcommands:
+  models          List available models
+'
+  } > "$SANDBOX/verbose-help.txt"
+  cat > "$SANDBOX/bin/agy" <<AGYSTUB
+#!/usr/bin/env bash
+case "\${1:-}" in
+  --help|-h) cat "$SANDBOX/verbose-help.txt"; exit 0 ;;
+  --version) echo 9.9.9-fake; exit 0 ;;
+  models)    cat "$FAKE_AGY_CATALOG"; exit 0 ;;
+esac
+: > "$FAKE_AGY_ARGV_LOG"
+for a in "\$@"; do printf '%s
+' "\$a" >> "$FAKE_AGY_ARGV_LOG"; done
+echo fake-agy-ok
+AGYSTUB
+  chmod +x "$SANDBOX/bin/agy"
+
+  local before; before="$(cat "$AGY_SETTINGS_FILE")"
+  run_wrapper ask --model flash "hi"
+  assert_eq 0 "$RC" "the call should succeed"
+  argv_has "--model" || fail_msg "the native --model flag must still be detected with large help output"
+  assert_eq "$before" "$(cat "$AGY_SETTINGS_FILE")" "settings.json must not be patched when --model is supported"
+  assert_not_contains "$ERR" "falling back to temporary settings.json patching"     "a false-negative probe would silently switch to the legacy path"
+}
+
+t_repeated_calls_are_stable() {
+  # The SIGPIPE race was intermittent, so assert over repetitions rather than
+  # a single run.
+  local i=0 fails=0
+  while [ "$i" -lt 15 ]; do
+    run_wrapper ask --model gpt-oss "hi"
+    argv_has "gpt-oss-120b-medium" || fails=$((fails + 1))
+    i=$((i + 1))
+  done
+  assert_eq 0 "$fails" "alias resolution must be deterministic across repeated calls"
+}
+
 # =================================================================== run ===
 printf '\n%s\n' "agy-run.sh test suite"
 
@@ -769,6 +831,12 @@ it "security: cache dir is not world-readable"          t_cache_dir_is_not_world
 it "security: malformed catalogue rows are dropped"     t_catalogue_rejects_malformed_rows
 it "security: alias values are never executed"          t_aliases_file_is_never_executed
 it "security: catalogue content is never executed"      t_catalogue_content_is_never_executed
+
+printf '
+%s
+' "robustness"
+it "robust: capability probe survives large help output"  t_capability_probe_is_not_racy
+it "robust: repeated calls resolve identically"           t_repeated_calls_are_stable
 
 printf '\n'
 if [ "$FAIL" -eq 0 ]; then

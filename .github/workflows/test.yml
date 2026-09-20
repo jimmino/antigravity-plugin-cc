@@ -40,7 +40,7 @@ jobs:
       - name: Lint wrapper and tests
         run: |
           shellcheck -s bash -e SC2016 plugins/agy/scripts/agy-run.sh
-          shellcheck -s bash -e SC2016,SC2329,SC1090 tests/run-tests.sh tests/fixtures/fake-agy
+          shellcheck -s bash -e SC2016,SC2329,SC2317,SC1090 tests/run-tests.sh tests/fixtures/fake-agy
 
   manifest:
     name: manifests are valid JSON
