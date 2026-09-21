@@ -248,9 +248,9 @@ catalogue_load() {
   _CATALOGUE_LOADED=1
 }
 
-# Prints the catalogue on stdout.
+# Prints the catalogue on stdout. To force a refetch, call catalogue_load 1.
 catalogue() {
-  catalogue_load "${1:-0}"
+  catalogue_load
   printf '%s' "$_CATALOGUE_CACHE"
 }
 

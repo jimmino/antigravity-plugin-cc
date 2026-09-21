@@ -1044,10 +1044,13 @@ t_second_opinion_reports_an_auth_failure() {
 }
 
 t_second_opinion_without_claude_exits_127() {
-  # A PATH narrow enough to hide claude still has to be able to run bash.
-  local bin_dir minimal outf errf
+  # A PATH narrow enough to hide claude still has to be able to run bash, and
+  # the wrapper calls dirname at load time. On macOS bash is /bin/bash while
+  # dirname lives in /usr/bin, so bash's directory alone is not enough.
+  local bin_dir tool_dir minimal outf errf
   bin_dir="$(dirname "$(command -v bash)")"
-  minimal="$SANDBOX/bin:$bin_dir"
+  tool_dir="$(dirname "$(command -v dirname)")"
+  minimal="$SANDBOX/bin:$bin_dir:$tool_dir"
   if PATH="$minimal" command -v claude >/dev/null 2>&1; then
     return 0   # claude sits next to bash here; nothing to assert
   fi
