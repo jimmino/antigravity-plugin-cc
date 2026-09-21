@@ -1092,7 +1092,7 @@ STUB
   export FAKE_AGY_RESPONSE="ok"
   run_wrapper offload --dir "$SANDBOX" "q"
   assert_eq 0 "$RC" "offload should succeed"
-  assert_eq 1 "$(cat "$SANDBOX/help-count" 2>/dev/null | wc -l | tr -d ' ')" \
+  assert_eq 1 "$(wc -l 2>/dev/null < "$SANDBOX/help-count" | tr -d ' ')" \
     "agy --help is probed once per call, not once per capability"
 }
 
