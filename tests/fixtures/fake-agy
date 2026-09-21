@@ -20,6 +20,8 @@
 #   FAKE_AGY_DENIED_COMMAND  1 => report a denied `command` action
 #   FAKE_AGY_STDERR          text written to stderr before exiting
 #   FAKE_AGY_FAIL_MODELS     comma-separated model ids that fail with a 503
+#   FAKE_AGY_CTX_COPY        path; a context.md in any --add-dir root is copied
+#                            here (the wrapper deletes the original on exit)
 set -u
 
 mode="${FAKE_AGY_MODE:-new}"
@@ -87,6 +89,14 @@ esac
 if [ -n "${FAKE_AGY_ARGV_LOG:-}" ]; then
   if [ "${FAKE_AGY_ARGV_APPEND:-0}" != "1" ]; then : > "$FAKE_AGY_ARGV_LOG"; fi
   for a in "$@"; do printf '%s\n' "$a" >> "$FAKE_AGY_ARGV_LOG"; done
+fi
+
+if [ -n "${FAKE_AGY_CTX_COPY:-}" ]; then
+  prev=""
+  for a in "$@"; do
+    if [ "$prev" = "--add-dir" ] && [ -f "$a/context.md" ]; then cp "$a/context.md" "$FAKE_AGY_CTX_COPY"; fi
+    prev="$a"
+  done
 fi
 
 # Which model and output format did the wrapper ask for?

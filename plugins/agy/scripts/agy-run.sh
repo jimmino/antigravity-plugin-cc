@@ -60,24 +60,35 @@ auth_status() {
 
 j_esc() {
   local s="$1"
-  s="${s//\/\\}"
+  s="${s//\\/\\\\}"
   s="${s//\"/\\\"}"
-  s="${s//$'\n'/\n}"
-  s="${s//$'\r'/\r}"
-  s="${s//$'\t'/\t}"
+  s="${s//$'\n'/\\n}"
+  s="${s//$'\r'/\\r}"
+  s="${s//$'\t'/\\t}"
   printf '%s' "$s"
 }
 
 # Capability probe against the *installed* agy, so the wrapper adapts to old
 # and new builds instead of assuming a feature set.
+#
+# The cache is filled by _agy_help_load, which must run in the *current* shell.
+# Filling it from inside a `$(...)` fills a subshell's copy, which dies with the
+# subshell — every probe then re-spawned `agy --help`, seven times per offload.
 _AGY_HELP_CACHE=""
-agy_help_text() {
-  if [ -z "$_AGY_HELP_CACHE" ]; then
-    local path
-    path="$(find_agy 2>/dev/null || true)"
-    [ -n "$path" ] || return 1
+_AGY_HELP_LOADED=0
+_agy_help_load() {
+  [ "$_AGY_HELP_LOADED" = "1" ] && return 0
+  local path
+  path="$(find_agy 2>/dev/null || true)"
+  if [ -n "$path" ]; then
     _AGY_HELP_CACHE="$("$path" --help 2>&1 || true)"
   fi
+  _AGY_HELP_LOADED=1
+}
+
+agy_help_text() {
+  _agy_help_load
+  [ -n "$_AGY_HELP_CACHE" ] || return 1
   printf '%s' "$_AGY_HELP_CACHE"
 }
 
@@ -87,10 +98,9 @@ agy_help_text() {
 # pattern matched. A false negative here silently downgrades the wrapper to
 # the settings.json-patching path, so this probe must not be racy.
 _agy_help_has() {
-  local help
-  help="$(agy_help_text 2>/dev/null || true)"
-  [ -n "$help" ] || return 1
-  grep -qE "$1" <<<"$help"
+  _agy_help_load
+  [ -n "$_AGY_HELP_CACHE" ] || return 1
+  grep -qE "$1" <<<"$_AGY_HELP_CACHE"
 }
 
 agy_supports_model_flag() {
@@ -198,14 +208,15 @@ _write_cache_atomic() {
   mv "$tmp" "$AGY_MODELS_CACHE" || { rm -f "$tmp"; return 1; }
 }
 
-# Prints the catalogue on stdout. Never fatal: an empty catalogue degrades the
-# wrapper to pass-through mode rather than blocking the call.
+# Loads the catalogue into _CATALOGUE_CACHE. Never fatal: an empty catalogue
+# degrades the wrapper to pass-through mode rather than blocking the call.
+# Like _agy_help_load it only memoises when run in the current shell, so entry
+# points call it directly before anything reads the catalogue from a pipeline.
 _CATALOGUE_CACHE=""
 _CATALOGUE_LOADED=0
-catalogue() {
+catalogue_load() {
   local force="${1:-0}"
   if [ "$_CATALOGUE_LOADED" = "1" ] && [ "$force" != "1" ]; then
-    printf '%s' "$_CATALOGUE_CACHE"
     return 0
   fi
 
@@ -235,6 +246,11 @@ catalogue() {
 
   _CATALOGUE_CACHE="$fresh"
   _CATALOGUE_LOADED=1
+}
+
+# Prints the catalogue on stdout.
+catalogue() {
+  catalogue_load "${1:-0}"
   printf '%s' "$_CATALOGUE_CACHE"
 }
 
@@ -421,6 +437,8 @@ resolve_model() {
     exit 64
   fi
 
+  catalogue_load
+
   # 1. Exact catalogue hit (id or label) wins — no guessing needed.
   local hit
   if hit="$(catalogue_lookup "$input" 2>/dev/null)" && [ -n "$hit" ]; then
@@ -492,6 +510,7 @@ validate_effort() {
 # fd arg lets cmd_help reuse the same table on stdout.
 print_model_table() {
   local fd="${1:-2}"
+  catalogue_load
   {
     echo "Available models (live from \`agy models\`):"
     local cat_out; cat_out="$(catalogue)"
@@ -533,7 +552,11 @@ cmd_check() {
 JSON
     return 0
   fi
-  version="$("$path" --version 2>/dev/null | head -n1 || echo unknown)"
+  # Not `| head -n1 || echo unknown`: under pipefail a SIGPIPE on agy fails the
+  # pipeline after head has printed, and the JSON gets "x.y.z\nunknown".
+  version="$("$path" --version 2>/dev/null || true)"
+  version="${version%%$'\n'*}"
+  [ -n "$version" ] || version="unknown"
   auth="$(auth_status)"
   local native="false" models_cmd="false" plan="false" jsonout="false" offload="false"
   agy_supports_model_flag && native="true"
@@ -557,7 +580,8 @@ cmd_models() {
       *)         echo "error: unknown flag for models: '$1'" >&2; exit 64 ;;
     esac
   done
-  local out; out="$(catalogue "$force")"
+  catalogue_load "$force"
+  local out="$_CATALOGUE_CACHE"
   if [ -z "$out" ]; then
     echo "error: no model catalogue available." >&2
     echo "       agy may not be installed, may be offline, or may predate the" >&2
@@ -678,7 +702,7 @@ with open(dst, "w") as f:
     f.write("\n")
 PY
   else
-    local esc; esc="$(printf '%s' "$canonical" | sed -e 's/[\/&]/\&/g')"
+    local esc; esc="$(printf '%s' "$canonical" | sed -e 's/[\/&]/\\&/g')"
     sed -E "s/^([[:space:]]*\"model\"[[:space:]]*:[[:space:]]*\")[^\"]*(\".*)$/\1${esc}\2/" \
         "$AGY_SETTINGS_FILE" > "$tmp"
     echo "[wrapper] note: python3 missing, used sed fallback to patch settings.json" >&2
@@ -695,8 +719,11 @@ _restore_settings() {
 
 _do_patched_run() {
   local canonical="$1"; shift
-  cp -p "$AGY_SETTINGS_FILE" "$AGY_SETTINGS_BACKUP"
+  # Sentinel first: a concurrent wrapper's restore_orphaned_backup (which runs
+  # outside the lock) deletes any backup it finds without a sentinel, and then
+  # this run would have nothing to restore from.
   printf '%s\n%s\n' "$$" "$canonical" > "$AGY_SETTINGS_SENTINEL"
+  cp -p "$AGY_SETTINGS_FILE" "$AGY_SETTINGS_BACKUP"
   trap '_restore_settings' EXIT INT TERM HUP
   _patch_model_field "$canonical"
   local rc=0
@@ -792,7 +819,7 @@ parse_model_flags() {
     # model it landed on — otherwise the indirection is unauditable.
     case "$RESOLVED_VIA" in
       builtin:*|alias:*)
-        [ "${AGY_QUIET:-0}" = "1" ] ||           echo "[wrapper] model: $model_alias -> $RESOLVED_ID (${RESOLVED_LABEL})" >&2 ;;
+        [ "${AGY_QUIET:-0}" = "1" ] || echo "[wrapper] model: $model_alias -> $RESOLVED_ID (${RESOLVED_LABEL})" >&2 ;;
     esac
   fi
   PARSED_REST=("$@")
@@ -834,11 +861,14 @@ cmd_review() {
       --raw)       fwd+=(--raw); shift ;;
       --dir)       if [ $# -ge 2 ]; then dir="$2"; shift 2; else shift; fi ;;
       --dir=*)     dir="${1#--dir=}"; shift ;;
-      --)          shift; break ;;
+      --)          break ;;
       *)           break ;;
     esac
   done
-  if [ $# -gt 0 ]; then focus="$1"; shift; fi
+  # `review [focus] [-- paths...]`: a leading `--` means there is no focus, so
+  # the first path must not be mistaken for one.
+  if [ $# -gt 0 ] && [ "$1" != "--" ]; then focus="$1"; shift; fi
+  if [ "${1:-}" = "--" ]; then shift; fi
   paths=("$@")
 
   local repo_dir="$dir"
@@ -874,12 +904,28 @@ cmd_review() {
     while IFS= read -r line; do
       [ -z "$line" ] || echo "[wrapper] omitted from the review (holds secrets): $line" >&2
     done <<<"$omitted"
+    if [ -z "${diff//[[:space:]]/}" ]; then
+      echo "error: the only changes in $repo_dir are to .env files, which are never sent for review." >&2
+      exit 1
+    fi
   fi
 
   # New files are not in `git diff HEAD`. Name them so the model reads them off
-  # disk instead of reviewing a change it cannot see.
-  local untracked
-  untracked="$(git -C "$repo_dir" ls-files --others --exclude-standard 2>/dev/null | head -n 40 || true)"
+  # disk instead of reviewing a change it cannot see — scoped to the requested
+  # paths, and never a .env, which the guard forbids it to open anyway.
+  local untracked="" u base n_untracked=0
+  while IFS= read -r u; do
+    [ -n "$u" ] || continue
+    base="${u##*/}"
+    case "$base" in
+      .env.example) : ;;
+      .env*) continue ;;
+    esac
+    untracked="${untracked:+$untracked
+}$u"
+    n_untracked=$(( n_untracked + 1 ))
+    if [ "$n_untracked" -ge 40 ]; then break; fi
+  done < <(git -C "$repo_dir" ls-files --others --exclude-standard -- ${paths[@]+"${paths[@]}"} 2>/dev/null || true)
 
   local focus_line=""
   if [ -n "$focus" ]; then focus_line="Focus: $focus"; fi
@@ -1069,6 +1115,18 @@ _offload_cleanup() {
   return 0
 }
 
+# A path as the agy binary itself sees it. Under Git Bash / MSYS agy is a native
+# Windows .exe: MSYS rewrites a path that is a whole argument (so --add-dir is
+# fine), but not one buried inside the prompt text, and `/tmp/...` written into
+# the prompt names a file the model cannot open.
+_native_path() {
+  if command -v cygpath >/dev/null 2>&1; then
+    cygpath -m "$1" 2>/dev/null || printf '%s' "$1"
+  else
+    printf '%s' "$1"
+  fi
+}
+
 # Only ever called behind an explicit --stdin: a wrapper that reads stdin on
 # spec hangs forever whenever it is launched with an inherited pipe nobody
 # closes, which is the normal case inside an agent harness.
@@ -1114,7 +1172,8 @@ def pick(node, *names):
 resp = pick(data, "response", "result", "text", "output")
 if not isinstance(resp, str):
     resp = ""
-with open(dst, "w", encoding="utf-8") as fh:
+# newline="": text mode on Windows would turn every \n of the answer into \r\n.
+with open(dst, "w", encoding="utf-8", newline="") as fh:
     fh.write(resp)
 
 usage = pick(data, "usage") or {}
@@ -1301,7 +1360,13 @@ cmd_offload() {
   done
   for r in ${OFFLOAD_ROOTS[@]+"${OFFLOAD_ROOTS[@]}"}; do offload_warn_secrets "$r"; done
 
-  trap '_offload_cleanup' EXIT INT TERM HUP
+  # A trap that only cleans up would let the loop carry on after a signal and
+  # start the next model in the chain with its context file already deleted.
+  # The signal traps exit instead, and the EXIT trap does the cleaning.
+  trap '_offload_cleanup' EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  trap 'exit 129' HUP
   local ctx_file="" ctx_note=""
   if [ "$use_stdin" = "1" ] && ctx_file="$(offload_capture_stdin)" && [ -n "$ctx_file" ]; then
     # offload_capture_stdin ran in a command substitution, so the global it set
@@ -1309,11 +1374,15 @@ cmd_offload() {
     OFFLOAD_CTX_DIR="$(dirname "$ctx_file")"
     OFFLOAD_ROOTS+=("$OFFLOAD_CTX_DIR")
     ctx_note="
-Context from the calling agent — read this file first: $ctx_file
+Context from the calling agent — read this file first: $(_native_path "$ctx_file")
 "
   else
     ctx_file=""
   fi
+
+  # Load once here, in this shell, so the resolutions below — two of which run
+  # in subshells — share it instead of each re-reading or re-fetching it.
+  catalogue_load
 
   # An explicit --model may fail hard (that is the user asking for something
   # specific); the default tier degrades to agy's own default instead.
@@ -1354,7 +1423,7 @@ ${prompt}"
   local outfile errfile ansfile
   outfile="$(mktemp)"; errfile="$(mktemp)"; ansfile="$(mktemp)"
 
-  local started rc=1 m
+  local started rc=1 m attempts=0
   started="$(date +%s 2>/dev/null || echo 0)"
 
   for m in ${chain[@]+"${chain[@]}"}; do
@@ -1362,10 +1431,13 @@ ${prompt}"
     now="$(date +%s 2>/dev/null || echo 0)"
     elapsed=$(( now - started ))
     left=$(( budget - elapsed ))
-    if [ "$left" -lt "$AGY_OFFLOAD_MIN_ATTEMPT" ]; then
+    # The floor gates *retries* only. Applied to the first attempt it made any
+    # --budget under AGY_OFFLOAD_MIN_ATTEMPT a silent no-op that still exited 1.
+    if [ "$attempts" -gt 0 ] && [ "$left" -lt "$AGY_OFFLOAD_MIN_ATTEMPT" ]; then
       echo "[wrapper] only ${left}s of budget left; not starting $m" >&2
       break
     fi
+    attempts=$(( attempts + 1 ))
     per="$timeout_arg"
     if [ -z "$per" ]; then per="$(( left - AGY_OFFLOAD_MARGIN ))s"; fi
     if agy_supports_output_format && command -v python3 >/dev/null 2>&1; then json_mode=1; fi
@@ -1392,8 +1464,9 @@ ${prompt}"
       parsed=1
       answer="$(cat "$outfile")"
     fi
-    # Trim: a whitespace-only answer is no answer.
-    answer="$(printf '%s' "$answer" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+    # A whitespace-only answer is no answer. Test for that without trimming the
+    # text: a per-line sed trim flattened every indented line of the answer.
+    if [ -z "${answer//[[:space:]]/}" ]; then answer=""; fi
 
     if [ -n "$denied" ]; then
       echo "[wrapper] read-only guard denied: $denied" >&2
@@ -1480,7 +1553,7 @@ except Exception as exc:
 
 # Windows paths in hand-written JSON are nearly always under-escaped. Escape any
 # backslash that does not already start a valid JSON escape, so "C:\Data\App"
-# parses as well as "C:\Data\App".
+# parses as well as "C:\\Data\\App".
 raw = re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', raw)
 try:
     jobs = json.loads(raw)
@@ -1525,10 +1598,10 @@ for i, job in enumerate(jobs, 1):
             sys.stderr.write(
                 "error: job '%s': a path contains a control character, which means a backslash\n"
                 "       escape was consumed while parsing %s. Write Windows paths with forward\n"
-                "       slashes (C:/Data/App) or doubled backslashes (C:\\Data\\App).\n" % (label, src))
+                "       slashes (C:/Data/App) or doubled backslashes (C:\\\\Data\\\\App).\n" % (label, src))
             sys.exit(2)
     pf = os.path.join(spool, "job-%03d.prompt" % i)
-    with open(pf, "w", encoding="utf-8") as fh:
+    with open(pf, "w", encoding="utf-8", newline="") as fh:
         fh.write(prompt)
     rows.append(SEP.join([
         label.replace(SEP, " ").replace("\n", " "),
@@ -1642,7 +1715,8 @@ cmd_fanout() {
 
     local body
     body="$(cat "$jprompt")"
-    ( bash "$self" "${args[@]}" "$body" >"$o" 2>"$e"; printf '%s' "$?" >"$r" ) &
+    # `--` so a prompt that starts with a dash is not parsed as an offload flag.
+    ( bash "$self" "${args[@]}" -- "$body" >"$o" 2>"$e"; printf '%s' "$?" >"$r" ) &
   done <<<"$(printf '%s' "$rows" | tr -d '\r')"
 
   wait
@@ -1692,7 +1766,8 @@ if not isinstance(data, dict):
 result = data.get("result")
 if not isinstance(result, str):
     result = ""
-with open(dst, "w", encoding="utf-8") as fh:
+# newline="": text mode on Windows would turn every \n of the answer into \r\n.
+with open(dst, "w", encoding="utf-8", newline="") as fh:
     fh.write(result)
 
 cost = data.get("total_cost_usd")
@@ -1775,16 +1850,18 @@ $ctx"
   infile="$(mktemp)"; outfile="$(mktemp)"; errfile="$(mktemp)"; ansfile="$(mktemp)"
   printf '%s\n\nTask:\n%s%s\n' "$guard" "$question" "$ctx" > "$infile"
 
+  # Run from --dir, not from wherever the wrapper was launched: Grep and Glob
+  # search the working directory by default, and the question never names it.
   local start end secs rc=0
   start="$(date +%s 2>/dev/null || echo 0)"
   if command -v timeout >/dev/null 2>&1; then
-    timeout "${tmo}s" "$claude_bin" -p --output-format json --model "$model" --effort "$effort" \
+    ( cd "$dir" && timeout "${tmo}s" "$claude_bin" -p --output-format json --model "$model" --effort "$effort" \
       --tools Read,Grep,Glob --permission-mode plan --permission-prompts none \
-      --add-dir "$dir" <"$infile" >"$outfile" 2>"$errfile" || rc=$?
+      --add-dir "$dir" ) <"$infile" >"$outfile" 2>"$errfile" || rc=$?
   else
-    "$claude_bin" -p --output-format json --model "$model" --effort "$effort" \
+    ( cd "$dir" && "$claude_bin" -p --output-format json --model "$model" --effort "$effort" \
       --tools Read,Grep,Glob --permission-mode plan --permission-prompts none \
-      --add-dir "$dir" <"$infile" >"$outfile" 2>"$errfile" || rc=$?
+      --add-dir "$dir" ) <"$infile" >"$outfile" 2>"$errfile" || rc=$?
   fi
   end="$(date +%s 2>/dev/null || echo 0)"
   secs=$(( end - start ))
@@ -1808,7 +1885,7 @@ $ctx"
   else
     answer="$(cat "$outfile")"
   fi
-  answer="$(printf '%s' "$answer" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+  if [ -z "${answer//[[:space:]]/}" ]; then answer=""; fi
 
   if [ "$is_error" = "1" ] || [ -z "$answer" ]; then
     local why; why="$(tr '\n' ' ' < "$errfile" 2>/dev/null | head -c 400)"

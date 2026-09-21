@@ -56,6 +56,7 @@ JSON
   # silently steers the next one.
   unset FAKE_AGY_RESPONSE FAKE_AGY_EMPTY FAKE_AGY_STATUS FAKE_AGY_IN FAKE_AGY_OUT 2>/dev/null || true
   unset FAKE_AGY_DENIED_COMMAND FAKE_AGY_STDERR FAKE_AGY_FAIL_MODELS FAKE_AGY_ARGV_APPEND 2>/dev/null || true
+  unset FAKE_AGY_CTX_COPY FAKE_CLAUDE_PWD 2>/dev/null || true
   unset FAKE_CLAUDE_ARGV FAKE_CLAUDE_STDIN FAKE_CLAUDE_RESULT FAKE_CLAUDE_ERROR 2>/dev/null || true
   unset AGY_FORCE_LEGACY_MODEL AGY_QUIET 2>/dev/null || true
   export AGY_MODELS_CACHE_TTL=3600
@@ -1064,6 +1065,141 @@ t_second_opinion_rejects_a_bad_effort() {
   assert_eq 64 "$RC" "an invalid effort is a usage error"
 }
 
+# ---------------------------------------------------------- regressions ----
+t_json_escaping_round_trips() {
+  # A backslash or newline in a path or version string must survive into
+  # valid JSON — `check` output is parsed by /agy:setup.
+  local input escaped decoded
+  input="$(printf 'C:\\agy\\bin "quoted"\tTAB\nline2')"
+  escaped="$( source "$WRAPPER"; j_esc "$input" )"
+  decoded="$(python3 -c 'import json, sys
+sys.stdout.reconfigure(newline="\n")
+sys.stdout.write(json.loads("\"" + sys.argv[1] + "\""))' "$escaped")"
+  assert_eq "$input" "$decoded" "j_esc output must decode back to the input"
+}
+
+t_offload_probes_agy_help_once() {
+  mv "$SANDBOX/bin/agy" "$SANDBOX/bin/agy-real"
+  cat > "$SANDBOX/bin/agy" <<STUB
+#!/usr/bin/env bash
+case "\${1:-}" in --help|-h) echo probe >> "$SANDBOX/help-count" ;; esac
+exec bash "$SANDBOX/bin/agy-real" "\$@"
+STUB
+  chmod +x "$SANDBOX/bin/agy"
+  export FAKE_AGY_RESPONSE="ok"
+  run_wrapper offload --dir "$SANDBOX" "q"
+  assert_eq 0 "$RC" "offload should succeed"
+  assert_eq 1 "$(cat "$SANDBOX/help-count" 2>/dev/null | wc -l | tr -d ' ')" \
+    "agy --help is probed once per call, not once per capability"
+}
+
+t_offload_keeps_answer_indentation() {
+  FAKE_AGY_RESPONSE="$(printf 'findings:\n  - nested item\n      code line')"
+  export FAKE_AGY_RESPONSE
+  run_wrapper offload --dir "$SANDBOX" "q"
+  assert_eq 0 "$RC" "offload should succeed"
+  assert_contains "$OUT" "$(printf '\n  - nested item\n      code line')" "indentation must survive"
+  assert_not_contains "$OUT" $'\r' "the answer must not pick up CRs"
+}
+
+t_offload_short_budget_still_runs() {
+  export FAKE_AGY_RESPONSE="ok"
+  run_wrapper offload --dir "$SANDBOX" --budget 90 "q"
+  assert_eq 0 "$RC" "a budget under the retry floor must still make one attempt"
+  assert_contains "$OUT" "ok" "and return its answer"
+}
+
+t_offload_context_path_is_native() {
+  # Under MSYS agy is a Windows .exe; the path inside the prompt has to be one
+  # it can open. A stub cygpath stands in for the real one.
+  cat > "$SANDBOX/bin/cygpath" <<'STUB'
+#!/usr/bin/env bash
+printf 'NATIVE:%s' "$2"
+STUB
+  chmod +x "$SANDBOX/bin/cygpath"
+  export FAKE_AGY_RESPONSE="ok"
+  run_wrapper_stdin "BODY" offload --dir "$SANDBOX" --stdin "q"
+  assert_eq 0 "$RC" "offload should succeed"
+  argv_contains "read this file first: NATIVE:" || fail_msg "the context path in the prompt must be converted"
+}
+
+make_review_repo() {
+  mkdir -p "$SANDBOX/repo"
+  ( cd "$SANDBOX/repo" \
+    && git init -q . \
+    && git config user.email t@e.st && git config user.name test \
+    && echo one > a.txt && echo one > b.txt && echo "SECRET=old" > .env \
+    && git add -A && git commit -qm init ) >/dev/null 2>&1
+}
+
+t_review_paths_without_focus() {
+  make_review_repo
+  ( cd "$SANDBOX/repo" && echo A-CHANGE >> a.txt && echo B-CHANGE >> b.txt ) >/dev/null 2>&1
+  export FAKE_AGY_RESPONSE="ok" FAKE_AGY_CTX_COPY="$SANDBOX/ctx.md"
+  ( cd "$SANDBOX/repo" && bash "$WRAPPER" review -- a.txt ) >/dev/null 2>&1
+  if argv_contains "Focus: a.txt"; then fail_msg "a path after a leading -- is not a focus"; fi
+  assert_contains "$(cat "$SANDBOX/ctx.md" 2>/dev/null)" "A-CHANGE" "the named path is reviewed"
+  assert_not_contains "$(cat "$SANDBOX/ctx.md" 2>/dev/null)" "B-CHANGE" "and nothing else"
+}
+
+t_review_focus_and_paths() {
+  make_review_repo
+  ( cd "$SANDBOX/repo" && echo A-CHANGE >> a.txt && echo B-CHANGE >> b.txt ) >/dev/null 2>&1
+  export FAKE_AGY_RESPONSE="ok" FAKE_AGY_CTX_COPY="$SANDBOX/ctx.md"
+  ( cd "$SANDBOX/repo" && bash "$WRAPPER" review "error handling" -- b.txt ) >/dev/null 2>&1
+  argv_contains "Focus: error handling" || fail_msg "the focus is passed on"
+  assert_contains "$(cat "$SANDBOX/ctx.md" 2>/dev/null)" "B-CHANGE" "the named path is reviewed"
+  assert_not_contains "$(cat "$SANDBOX/ctx.md" 2>/dev/null)" "A-CHANGE" "and nothing else"
+}
+
+t_review_refuses_a_dotenv_only_diff() {
+  make_review_repo
+  ( cd "$SANDBOX/repo" && echo "SECRET=LEAKED-VALUE" > .env ) >/dev/null 2>&1
+  export FAKE_AGY_RESPONSE="ok"
+  local err rc=0
+  err="$( ( cd "$SANDBOX/repo" && bash "$WRAPPER" review ) 2>&1 >/dev/null )" || rc=$?
+  assert_eq 1 "$rc" "nothing reviewable is a failure, not an empty review"
+  assert_contains "$err" ".env files" "and says why"
+  if [ -s "$FAKE_AGY_ARGV_LOG" ]; then fail_msg "agy must not be called with an empty diff"; fi
+}
+
+t_review_never_names_an_untracked_dotenv() {
+  make_review_repo
+  ( cd "$SANDBOX/repo" && echo A-CHANGE >> a.txt && echo x > new.js && echo "K=v" > .env.local ) >/dev/null 2>&1
+  export FAKE_AGY_RESPONSE="ok"
+  ( cd "$SANDBOX/repo" && bash "$WRAPPER" review ) >/dev/null 2>&1
+  argv_contains "new.js" || fail_msg "untracked source files are named"
+  if argv_contains ".env.local"; then fail_msg "an untracked .env must not be named for reading"; fi
+}
+
+t_fanout_prompt_that_looks_like_a_flag() {
+  export FAKE_AGY_RESPONSE="an answer"
+  run_wrapper fanout --dir "$SANDBOX" --prompt "--help"
+  assert_contains "$OUT" "an answer" "a dash-leading prompt is still a prompt"
+}
+
+t_second_opinion_runs_in_the_target_dir() {
+  install_fake_claude
+  mkdir -p "$SANDBOX/proj"
+  export FAKE_CLAUDE_PWD="$SANDBOX/claude-pwd.txt"
+  run_wrapper second-opinion --dir "$SANDBOX/proj" "why"
+  assert_eq 0 "$RC" "the second opinion should succeed"
+  assert_eq "$(cd "$SANDBOX/proj" && pwd)" "$(cat "$FAKE_CLAUDE_PWD" 2>/dev/null)" "claude must start in --dir"
+}
+
+t_legacy_sed_fallback_escapes_the_model_name() {
+  # Without python3 the settings patch falls back to sed, where `/` and `&`
+  # in the replacement are metacharacters.
+  local tools="$SANDBOX/nopy" t
+  mkdir -p "$tools"
+  for t in mktemp sed mv; do
+    printf '#!/bin/sh\nexec "%s" "$@"\n' "$(command -v "$t")" > "$tools/$t"
+    chmod +x "$tools/$t"
+  done
+  ( source "$WRAPPER"; PATH="$tools"; _patch_model_field 'Team A/B & Co' ) >/dev/null 2>&1
+  assert_eq 'Team A/B & Co' "$(settings_model)" "the model name must be written literally"
+}
+
 # --------------------------------------------------------- capabilities ----
 t_check_reports_offload_capabilities() {
   run_wrapper check
@@ -1219,6 +1355,20 @@ printf '
 ' "robustness"
 it "robust: capability probe survives large help output"  t_capability_probe_is_not_racy
 it "robust: repeated calls resolve identically"           t_repeated_calls_are_stable
+
+printf '\n%s\n' "regressions"
+it "regress: check JSON escapes backslashes and newlines"  t_json_escaping_round_trips
+it "regress: agy --help is probed once per offload"        t_offload_probes_agy_help_once
+it "regress: offload keeps the answer's indentation"       t_offload_keeps_answer_indentation
+it "regress: a short --budget still makes one attempt"     t_offload_short_budget_still_runs
+it "regress: context path in the prompt is native"         t_offload_context_path_is_native
+it "regress: review -- paths works without a focus"        t_review_paths_without_focus
+it "regress: review focus -- paths scopes the diff"        t_review_focus_and_paths
+it "regress: review refuses a .env-only diff"              t_review_refuses_a_dotenv_only_diff
+it "regress: review never names an untracked .env"         t_review_never_names_an_untracked_dotenv
+it "regress: fanout prompt that looks like a flag"         t_fanout_prompt_that_looks_like_a_flag
+it "regress: second-opinion runs in --dir"                 t_second_opinion_runs_in_the_target_dir
+it "regress: legacy sed fallback escapes / and &"          t_legacy_sed_fallback_escapes_the_model_name
 
 printf '\n'
 if [ "$FAIL" -eq 0 ]; then

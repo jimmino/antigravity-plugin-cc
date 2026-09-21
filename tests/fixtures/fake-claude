@@ -6,7 +6,10 @@
 #   FAKE_CLAUDE_STDIN   path; the run copies its stdin here
 #   FAKE_CLAUDE_RESULT  the answer text (default: an independent answer)
 #   FAKE_CLAUDE_ERROR   1 => report is_error with an auth-shaped message
+#   FAKE_CLAUDE_PWD     path; the run records its working directory here
 set -u
+
+if [ -n "${FAKE_CLAUDE_PWD:-}" ]; then pwd > "$FAKE_CLAUDE_PWD"; fi
 
 if [ -n "${FAKE_CLAUDE_ARGV:-}" ]; then
   : > "$FAKE_CLAUDE_ARGV"

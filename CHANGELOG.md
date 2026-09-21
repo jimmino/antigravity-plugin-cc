@@ -68,7 +68,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Python helpers now force LF on stdout. On Windows they emitted CRLF, so every
   value read back in the shell carried a trailing carriage return and compared
-  unequal to what it plainly was.
+  unequal to what it plainly was. The answer files they write are now opened
+  with `newline=""` too, for the same reason.
+- **Backslashes lost in transit.** Earlier edits to the wrapper dropped
+  backslashes, silently breaking two escapers. `/agy:setup`'s JSON no longer
+  escaped `\` or newlines, so a Windows path or a multi-line version string
+  made it unparseable. The legacy `settings.json` patch (the no-`python3` sed
+  path) turned `/` and `&` in a model name into sed metacharacters.
+- **Offload answers lost their indentation.** A per-line whitespace trim
+  flattened every nested list and code block. Only a wholly blank answer is
+  treated as empty now. The same applied to `/agy:second-opinion`.
+- **`--budget` under 120s did nothing.** The retry floor also gated the first
+  attempt, so the call exited 1 without ever running agy. The floor now
+  applies to retries only.
+- **On Windows the model was sent a context path it could not open.** agy is a
+  native `.exe`. MSYS rewrites paths that stand as whole arguments, but not
+  the `/tmp/...` path written into the prompt. That path now goes through
+  `cygpath -m` when it is available.
+- **`/agy:review -- <paths>` with no focus** took the first path as the focus
+  and reviewed the whole diff. Untracked files are now scoped to the given
+  paths, an untracked `.env` is never named for the model to read, and a diff
+  that held only `.env` changes fails with an explanation instead of sending
+  an empty review.
+- The `agy --help` and catalogue caches were filled inside `$(...)`
+  subshells, so they never persisted and every capability probe spawned `agy`
+  again (seven times per offload). They are now filled once, in the calling
+  shell.
+- `/agy:fanout` passes each prompt after `--`, so a prompt that looks like a
+  flag stays a prompt.
+- `/agy:second-opinion` starts Claude in `--dir` rather than the caller's
+  working directory. Grep and Glob search the working directory by default.
+- An offload interrupted by a signal now exits. Before, the cleanup trap
+  returned, and the loop could go on to the next model with its context file
+  already deleted.
+- Legacy settings patch: the sentinel is written before the backup, so a
+  concurrent wrapper can no longer delete a fresh backup as "stale".
 
 ## [0.5.0] - 2026-09-20
 
