@@ -18,9 +18,9 @@ Then interpret the JSON output:
     curl -fsSL https://antigravity.google/cli/install.sh | bash
     ```
     Then re-run the check.
-  - `Skip for now` — explain that `/agy:ask`, `/agy:delegate`, `/agy:research`,
-    `/agy:review`, `/agy:image` and `/agy:models` will all fail until `agy` is
-    installed.
+  - `Skip for now` — explain that `/agy:ask`, `/agy:offload`, `/agy:fanout`,
+    `/agy:delegate`, `/agy:research`, `/agy:review`, `/agy:image` and
+    `/agy:models` will all fail until `agy` is installed.
 
 - If `installed: true` but `auth: missing`, tell the user to either:
   - run `!agy` once interactively to complete OAuth (cached in the system
@@ -43,3 +43,11 @@ The check also reports what the installed `agy` build supports:
 - `modelsSubcommand: false` — the build predates `agy models`, so the live
   catalogue and the intent aliases (`fast`, `flash`, `deep`, …) are
   unavailable; only exact model names will work. Suggest `agy update`.
+- `planMode: false` — the build has no `--mode` flag, so a run cannot be held
+  read-only. `/agy:offload`, `/agy:fanout` and `/agy:review` refuse to run
+  rather than send an unrestricted agent into the user's repository. `agy
+  update` fixes it.
+- `jsonOutput: false` — no `--output-format json`, or no `python3` on PATH.
+  Offloading still works, but without token telemetry or the detection that
+  tells a real answer from the narration of a turn cut short.
+- `offload: true` — the read-only offload path is available.

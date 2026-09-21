@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Hermetic stand-in for the Claude Code CLI, for the second-opinion bridge.
+#
+# Env knobs:
+#   FAKE_CLAUDE_ARGV    path; the run appends its argv here
+#   FAKE_CLAUDE_STDIN   path; the run copies its stdin here
+#   FAKE_CLAUDE_RESULT  the answer text (default: an independent answer)
+#   FAKE_CLAUDE_ERROR   1 => report is_error with an auth-shaped message
+set -u
+
+if [ -n "${FAKE_CLAUDE_ARGV:-}" ]; then
+  : > "$FAKE_CLAUDE_ARGV"
+  for a in "$@"; do printf '%s\n' "$a" >> "$FAKE_CLAUDE_ARGV"; done
+fi
+
+if [ -n "${FAKE_CLAUDE_STDIN:-}" ]; then
+  cat > "$FAKE_CLAUDE_STDIN"
+else
+  cat > /dev/null
+fi
+
+if [ "${FAKE_CLAUDE_ERROR:-0}" = "1" ]; then
+  printf '{"is_error":true,"result":"authentication failed","num_turns":1}\n'
+  exit 0
+fi
+
+RESULT="${FAKE_CLAUDE_RESULT:-an independent answer}" python3 -c "
+import json, os
+print(json.dumps({
+    'is_error': False,
+    'result': os.environ['RESULT'],
+    'num_turns': 3,
+    'total_cost_usd': 0.0421,
+}))"

@@ -2,14 +2,24 @@
 # Hermetic stand-in for the real `agy` binary.
 #
 # Env knobs:
-#   FAKE_AGY_MODE        new (default) | old-no-model | old-no-models | no-effort
+#   FAKE_AGY_MODE        new (default) | old-no-model | old-no-models | no-effort | old-no-mode
 #   FAKE_AGY_CATALOG     path to a TSV catalogue served by `models`
 #   FAKE_AGY_JSON        1 => `models --output-format json` is supported
 #   FAKE_AGY_ARGV_LOG    path; every non-help invocation appends its argv here
+#   FAKE_AGY_ARGV_APPEND 1 => keep earlier argv in the log (for parallel runs)
 #   FAKE_AGY_SETTINGS    path; if set, the run echoes that file's "model" value
 #   FAKE_AGY_EXIT        exit code for a prompt run (default 0)
 #   FAKE_AGY_STDOUT      canned stdout for a prompt run
 #   FAKE_AGY_MODELS_FAIL 1 => `models` fails (simulates offline)
+#
+# Print-mode / offload knobs (only meaningful with --output-format json):
+#   FAKE_AGY_RESPONSE        the answer text (single line; default fake-agy-ok)
+#   FAKE_AGY_EMPTY           1 => an empty response, as when a turn is cut short
+#   FAKE_AGY_STATUS          status field (default OK)
+#   FAKE_AGY_IN/FAKE_AGY_OUT token counts
+#   FAKE_AGY_DENIED_COMMAND  1 => report a denied `command` action
+#   FAKE_AGY_STDERR          text written to stderr before exiting
+#   FAKE_AGY_FAIL_MODELS     comma-separated model ids that fail with a 503
 set -u
 
 mode="${FAKE_AGY_MODE:-new}"
@@ -24,6 +34,15 @@ print_help() {
   case "$mode" in
     old-no-model|no-effort) : ;;
     *)                      echo "  --effort                        Reasoning effort (low|medium|high)" ;;
+  esac
+  case "$mode" in
+    old-no-mode|old-no-model) : ;;
+    *)
+      echo "  --disable-slash-commands        Disable slash command expansion in print mode"
+      echo "  --mode                          Set the agent execution mode (accept-edits, plan)"
+      echo "  --output-format                 Output format for print mode (text, json)"
+      echo "  --print-timeout                 Optional time limit for print mode"
+      ;;
   esac
   echo "  -p                              Short alias for --print"
   echo "  --print                         Run a single prompt non-interactively"
@@ -66,8 +85,53 @@ case "${1:-}" in
 esac
 
 if [ -n "${FAKE_AGY_ARGV_LOG:-}" ]; then
-  : > "$FAKE_AGY_ARGV_LOG"
+  if [ "${FAKE_AGY_ARGV_APPEND:-0}" != "1" ]; then : > "$FAKE_AGY_ARGV_LOG"; fi
   for a in "$@"; do printf '%s\n' "$a" >> "$FAKE_AGY_ARGV_LOG"; done
+fi
+
+# Which model and output format did the wrapper ask for?
+json_out=0; model=""; prev=""
+for a in "$@"; do
+  case "$prev" in
+    --model)         model="$a" ;;
+    --output-format) if [ "$a" = "json" ]; then json_out=1; fi ;;
+  esac
+  prev="$a"
+done
+
+if [ -n "${FAKE_AGY_STDERR:-}" ]; then printf '%s\n' "$FAKE_AGY_STDERR" >&2; fi
+
+if [ -n "${FAKE_AGY_FAIL_MODELS:-}" ] && [ -n "$model" ]; then
+case ",${FAKE_AGY_FAIL_MODELS}," in
+  *",${model},"*)
+    echo "error: 503 UNAVAILABLE: model is overloaded, no capacity" >&2
+    if [ "$json_out" = "1" ]; then
+      printf '{"status":"ERROR","response":"","usage":{"input_tokens":0,"output_tokens":0},"denied_actions":[]}\n'
+    fi
+    exit 1
+    ;;
+esac
+fi
+
+if [ "$json_out" = "1" ]; then
+  resp="${FAKE_AGY_RESPONSE:-${FAKE_AGY_STDOUT:-fake-agy-ok}}"
+  if [ "${FAKE_AGY_EMPTY:-0}" = "1" ]; then resp=""; fi
+  denied='[]'
+  if [ "${FAKE_AGY_DENIED_COMMAND:-0}" = "1" ]; then
+    denied='[{"action":"command","display_name":"grep -c ERROR app.log"}]'
+  fi
+  # python3 rather than sed: the escaping a JSON string literal needs is
+  # exactly what a shell heredoc mangles.
+  RESP="$resp" STATUS="${FAKE_AGY_STATUS:-OK}" TIN="${FAKE_AGY_IN:-1234}" \
+  TOUT="${FAKE_AGY_OUT:-56}" DENIED="$denied" python3 -c "
+import json, os
+print(json.dumps({
+    'status': os.environ['STATUS'],
+    'response': os.environ['RESP'],
+    'usage': {'input_tokens': int(os.environ['TIN']), 'output_tokens': int(os.environ['TOUT'])},
+    'denied_actions': json.loads(os.environ['DENIED']),
+}))"
+  exit "${FAKE_AGY_EXIT:-0}"
 fi
 
 if [ -n "${FAKE_AGY_SETTINGS:-}" ] && [ -f "${FAKE_AGY_SETTINGS}" ]; then

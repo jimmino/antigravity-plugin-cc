@@ -5,6 +5,71 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-09-20
+
+### Added
+- **`/agy:offload` — a read-only bulk read.** `agy` reads the files itself and
+  a short cited answer comes back, so the bulk tokens land in its context
+  window instead of Claude Code's. The run is held read-only with
+  `--mode plan` and `--disable-slash-commands`, and carries a guard that bans
+  writes and shell commands, skips `.env` files other than `.env.example`,
+  treats file contents as data rather than instructions, and demands
+  `path:line` citations or an explicit `UNKNOWN`.
+- **Long context on stdin.** `--stdin` writes whatever is piped in to a temp
+  file, adds it to the workspace and tells the model to read it first. The
+  prompt argument travels on the command line, which Windows caps at ~32K
+  characters, so a diff or a log excerpt never belongs there. Stdin is only
+  read behind the flag: a wrapper that read it on spec would hang whenever it
+  was launched with an inherited pipe nobody closes.
+- **Telemetry and partial-answer detection.** Offloads parse
+  `agy --output-format json` and print one line per call on stderr:
+  `label | model | seconds | in= out=`. A turn cut short by an auto-denied
+  shell command is reported as `PARTIAL` (the text is probably narration, not
+  an answer) or `ABORTED`, with the remedy, instead of being passed off as a
+  result.
+- **A capacity fallback chain.** A 503/429 retries down a chain of *aliases*
+  resolved against the live catalogue — no version is named in the script — and
+  the answer is flagged as weaker than the one asked for. Timeouts are not
+  retried: the task was too big, and the retry would get a smaller slice of the
+  budget. The whole chain runs under a 540-second budget, below Claude Code's
+  600-second tool kill.
+- **Workspace roots.** `--dir` plus repeatable `--add-dir`, so one question can
+  span sibling trees without pointing the workspace at their common parent —
+  which is usually where the credentials live. The wrapper warns when a root
+  carries a `*token*.json`, `*credential*.json` or `*secret*.json` at its top
+  level or one below.
+- **`/agy:fanout`** — several offload jobs in parallel, from repeated
+  `--prompt` or a jobs file with per-job label, directory, model and extra
+  roots. Mis-escaped Windows paths in the jobs file (`C:\Data\backend`, where
+  `\b` is a valid JSON escape) are diagnosed instead of surfacing as a
+  baffling "directory not found".
+- **`/agy:second-opinion`** — an independent answer from a fresh Claude Code
+  running headless with only `Read`, `Grep` and `Glob` in plan mode. It can
+  search rather than brute-force read, and unlike a Claude model selected
+  inside `agy` it will not reach for a shell, get auto-denied and hand back its
+  opening narration as an answer.
+- **`agy:offload` subagent** and the user-invocable **`agy:offloading` skill**,
+  which carries the doctrine: offload semantics and never arithmetic, name the
+  files, bound the answer, anchor the citations, treat the result as evidence
+  rather than verdict, and never conclude absence without grepping for it.
+- `/agy:setup` now reports `planMode`, `jsonOutput` and `offload` alongside the
+  existing capability probes.
+
+### Changed
+- **`/agy:review` runs through the offload path.** The diff goes in as a
+  context file rather than on the command line, where a real diff blows past
+  the Windows argv cap; the run is read-only; untracked files are named so the
+  model reads them off disk; and any `.env` other than `.env.example` is
+  stripped from the diff before it leaves the machine, with a note saying
+  which. Review also takes `-- <paths>` to scope the diff.
+- `/agy:ask` is documented as what it is: a plain pass-through with no
+  read-only guarantee, no guard and no telemetry.
+
+### Fixed
+- Python helpers now force LF on stdout. On Windows they emitted CRLF, so every
+  value read back in the shell carried a trailing carriage return and compared
+  unequal to what it plainly was.
+
 ## [0.5.0] - 2026-09-20
 
 ### Changed

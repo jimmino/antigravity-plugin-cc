@@ -476,7 +476,7 @@
 </header>
 
 <main class="hero">
-  <span class="eyebrow">v0.5.0 · open source · MIT</span>
+  <span class="eyebrow">v0.6.0 · open source · MIT</span>
   <h1>Delegate tasks to Google <span class="grad">Antigravity</span> from inside Claude Code.</h1>
   <p class="lede">
     A small open-source plugin that wraps the <code class="inline">agy</code> CLI.
@@ -514,7 +514,7 @@
         <div class="step-num" aria-hidden="true"></div>
         <div>
           <h3 class="step-title">Install the plugin</h3>
-          <p class="step-desc">Pulls v0.5.0 into the user-scope plugin cache.</p>
+          <p class="step-desc">Pulls v0.6.0 into the user-scope plugin cache.</p>
           <div class="code">
             <button class="copy-btn" data-copy="/plugin install agy@antigravity-cc">Copy</button>
 <pre>/plugin install agy@antigravity-cc</pre>
@@ -575,8 +575,23 @@
       </div>
       <div class="tile">
         <span class="tile-cmd">/agy:review</span>
-        <h3 class="tile-title">Second-opinion review</h3>
-        <p class="tile-desc">Pipe the current <code class="inline">git diff</code> into <code class="inline">agy</code> for a steerable review with optional focus text.</p>
+        <h3 class="tile-title">Read-only diff review</h3>
+        <p class="tile-desc">Pipe the current <code class="inline">git diff</code> into <code class="inline">agy</code> as a context file for a steerable, read-only review. New files are named, <code class="inline">.env</code> never leaves the machine.</p>
+      </div>
+      <div class="tile">
+        <span class="tile-cmd">/agy:offload</span>
+        <h3 class="tile-title">Keep the tokens over there</h3>
+        <p class="tile-desc"><code class="inline">agy</code> reads the files itself and hands back a short cited answer, so a repo-wide sweep costs your Claude Code context a few hundred tokens instead of a quarter of a million. Held read-only in plan mode.</p>
+      </div>
+      <div class="tile">
+        <span class="tile-cmd">/agy:fanout</span>
+        <h3 class="tile-title">Several reads at once</h3>
+        <p class="tile-desc">One question across many folders, or many questions about one tree. Each call takes a minute or three, so they run concurrently under a throttle.</p>
+      </div>
+      <div class="tile">
+        <span class="tile-cmd">/agy:second-opinion</span>
+        <h3 class="tile-title">An independent view</h3>
+        <p class="tile-desc">A fresh Claude Code, read-only in plan mode, that has not seen your conversation. It searches rather than brute-force reads, and tells you what would change its mind.</p>
       </div>
     </div>
   </div>

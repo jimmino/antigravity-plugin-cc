@@ -52,6 +52,11 @@ JSON
   export FAKE_AGY_MODE="new"
   export ANTIGRAVITY_API_KEY="test-key-not-real"
   unset FAKE_AGY_JSON FAKE_AGY_MODELS_FAIL FAKE_AGY_EXIT FAKE_AGY_SETTINGS FAKE_AGY_STDOUT 2>/dev/null || true
+  # Tests export these; without clearing them a knob set by one case
+  # silently steers the next one.
+  unset FAKE_AGY_RESPONSE FAKE_AGY_EMPTY FAKE_AGY_STATUS FAKE_AGY_IN FAKE_AGY_OUT 2>/dev/null || true
+  unset FAKE_AGY_DENIED_COMMAND FAKE_AGY_STDERR FAKE_AGY_FAIL_MODELS FAKE_AGY_ARGV_APPEND 2>/dev/null || true
+  unset FAKE_CLAUDE_ARGV FAKE_CLAUDE_STDIN FAKE_CLAUDE_RESULT FAKE_CLAUDE_ERROR 2>/dev/null || true
   unset AGY_FORCE_LEGACY_MODEL AGY_QUIET 2>/dev/null || true
   export AGY_MODELS_CACHE_TTL=3600
 }
@@ -736,6 +741,344 @@ t_repeated_calls_are_stable() {
   assert_eq 0 "$fails" "alias resolution must be deterministic across repeated calls"
 }
 
+
+# ------------------------------------------------------------- offload ----
+# Substring match over the whole recorded argv, for things that live inside the
+# prompt argument (the guard, the context note) rather than on their own line.
+argv_contains() {
+  [ -f "${FAKE_AGY_ARGV_LOG:-}" ] || return 1
+  grep -Fq -- "$1" "$FAKE_AGY_ARGV_LOG"
+}
+
+# Same as run_wrapper, but with something on stdin.
+run_wrapper_stdin() {
+  local data="$1"; shift
+  local outf errf
+  outf="$(mktemp)"; errf="$(mktemp)"
+  RC=0
+  printf '%s' "$data" | bash "$WRAPPER" "$@" >"$outf" 2>"$errf" || RC=$?
+  OUT="$(cat "$outf")"; ERR="$(cat "$errf")"
+  rm -f "$outf" "$errf"
+}
+
+install_fake_claude() {
+  cp "$FIXTURES/fake-claude" "$SANDBOX/bin/claude"
+  chmod +x "$SANDBOX/bin/claude"
+  export FAKE_CLAUDE_ARGV="$SANDBOX/claude-argv.log"
+  export FAKE_CLAUDE_STDIN="$SANDBOX/claude-stdin.txt"
+}
+
+claude_argv_has() {
+  [ -f "${FAKE_CLAUDE_ARGV:-}" ] || return 1
+  grep -Fxq -- "$1" "$FAKE_CLAUDE_ARGV"
+}
+
+t_offload_runs_read_only() {
+  export FAKE_AGY_RESPONSE="AUTH | src/a.ts:1 | ok"
+  run_wrapper offload --dir "$SANDBOX" "where is auth"
+  assert_eq 0 "$RC" "offload should succeed"
+  argv_has "--mode"  || fail_msg "offload must pass --mode"
+  argv_has "plan"    || fail_msg "offload must run agy in plan mode"
+  argv_has "--disable-slash-commands" || fail_msg "offload must disable slash commands"
+  argv_has "--output-format" || fail_msg "offload must ask for structured output"
+}
+
+t_offload_injects_the_guard() {
+  export FAKE_AGY_RESPONSE="ok"
+  run_wrapper offload --dir "$SANDBOX" "where is auth"
+  argv_contains "Do NOT create, edit or delete files" || fail_msg "guard must ban writes"
+  argv_contains "Never open .env files"               || fail_msg "guard must ban .env reads"
+  argv_contains "Cite evidence as path:line"          || fail_msg "guard must demand citations"
+  argv_contains "say UNKNOWN"                         || fail_msg "guard must prefer UNKNOWN to a guess"
+}
+
+t_offload_adds_workspace_roots() {
+  mkdir -p "$SANDBOX/extra"
+  export FAKE_AGY_RESPONSE="ok"
+  run_wrapper offload --dir "$SANDBOX" --add-dir "$SANDBOX/extra" "q"
+  argv_has "$(cd "$SANDBOX" && pwd)"       || fail_msg "--dir must become a workspace root"
+  argv_has "$(cd "$SANDBOX/extra" && pwd)" || fail_msg "--add-dir must become a workspace root"
+}
+
+t_offload_rejects_a_file_as_add_dir() {
+  : > "$SANDBOX/a-file.txt"
+  run_wrapper offload --dir "$SANDBOX" --add-dir "$SANDBOX/a-file.txt" "q"
+  assert_eq 64 "$RC" "--add-dir takes a directory"
+  assert_contains "$ERR" "existing directory" "the error should say why"
+}
+
+t_offload_defaults_to_the_balanced_tier() {
+  export FAKE_AGY_RESPONSE="ok"
+  run_wrapper offload --dir "$SANDBOX" "q"
+  argv_has "gemini-3.8-flash-high" || fail_msg "the default offload tier is balanced"
+  assert_contains "$ERR" "balanced" "the default tier should be announced"
+}
+
+t_offload_honours_an_explicit_model() {
+  export FAKE_AGY_RESPONSE="ok"
+  run_wrapper offload --dir "$SANDBOX" --model fast "q"
+  argv_has "gemini-3.8-flash-low" || fail_msg "offload should honour --model"
+}
+
+t_offload_accepts_tier_as_a_synonym() {
+  export FAKE_AGY_RESPONSE="ok"
+  run_wrapper offload --dir "$SANDBOX" --tier deep "q"
+  argv_has "gemini-3.1-pro-high" || fail_msg "--tier should resolve like --model"
+}
+
+t_offload_reports_telemetry() {
+  export FAKE_AGY_RESPONSE="ok" FAKE_AGY_IN=4321 FAKE_AGY_OUT=99
+  run_wrapper offload --dir "$SANDBOX" --label recon "q"
+  assert_contains "$ERR" "recon | gemini-3.8-flash-high" "telemetry names the label and model"
+  assert_contains "$ERR" "in=4321 out=99" "telemetry reports token usage"
+}
+
+t_offload_marks_a_partial_answer() {
+  export FAKE_AGY_DENIED_COMMAND=1 FAKE_AGY_RESPONSE="I will start by listing the directory"
+  run_wrapper offload --dir "$SANDBOX" "count the errors"
+  assert_eq 1 "$RC" "a turn cut short by a denial is not a success"
+  assert_contains "$ERR" "PARTIAL" "a partial answer must be labelled"
+  assert_contains "$OUT" "I will start by listing" "the text still comes back, labelled"
+}
+
+t_offload_explains_an_auto_denied_shell_command() {
+  export FAKE_AGY_DENIED_COMMAND=1 FAKE_AGY_EMPTY=1
+  run_wrapper offload --dir "$SANDBOX" "count the errors"
+  assert_eq 1 "$RC" "an aborted turn is a failure"
+  assert_contains "$ERR" "ABORTED" "the abort must be named"
+  assert_contains "$ERR" "not offloadable" "and the remedy stated"
+}
+
+t_offload_falls_back_on_a_capacity_failure() {
+  export FAKE_AGY_FAIL_MODELS="gemini-3.8-flash-high" FAKE_AGY_RESPONSE="from the fallback"
+  export FAKE_AGY_ARGV_APPEND=1
+  run_wrapper offload --dir "$SANDBOX" "q"
+  assert_eq 0 "$RC" "the fallback answer is still an answer"
+  assert_contains "$OUT" "from the fallback" "the fallback answer is returned"
+  assert_contains "$ERR" "capacity failure" "the fallback is announced"
+  assert_contains "$ERR" "weaker than the one asked for" "and flagged as weaker"
+  argv_has "gemini-3.8-flash-medium" || fail_msg "the chain should try the next model"
+}
+
+t_offload_does_not_retry_other_failures() {
+  export FAKE_AGY_EMPTY=1 FAKE_AGY_STDERR="fatal: the prompt was malformed"
+  export FAKE_AGY_ARGV_APPEND=1
+  run_wrapper offload --dir "$SANDBOX" "q"
+  assert_eq 1 "$RC" "a non-capacity failure fails"
+  assert_not_contains "$ERR" "capacity failure" "and is not retried"
+  if argv_has "gemini-3.8-flash-medium"; then fail_msg "no fallback should be attempted"; fi
+}
+
+t_offload_puts_stdin_in_a_context_file() {
+  export FAKE_AGY_RESPONSE="ok"
+  run_wrapper_stdin "THE-DIFF-BODY" offload --dir "$SANDBOX" --stdin "q"
+  assert_eq 0 "$RC" "offload with context should succeed"
+  argv_contains "Context from the calling agent" || fail_msg "the prompt must point at the context file"
+  argv_contains "context.md" || fail_msg "the context file must be named"
+  if argv_contains "THE-DIFF-BODY"; then
+    fail_msg "the context body must NOT travel on the command line"
+  fi
+}
+
+t_offload_ignores_stdin_without_the_flag() {
+  export FAKE_AGY_RESPONSE="ok"
+  run_wrapper_stdin "THE-DIFF-BODY" offload --dir "$SANDBOX" "q"
+  assert_eq 0 "$RC" "offload without --stdin still runs"
+  if argv_contains "Context from the calling agent"; then
+    fail_msg "stdin must only be read behind an explicit --stdin"
+  fi
+}
+
+t_offload_fails_closed_without_plan_mode() {
+  export FAKE_AGY_MODE=old-no-mode FAKE_AGY_RESPONSE="ok"
+  run_wrapper offload --dir "$SANDBOX" "q"
+  assert_eq 1 "$RC" "an offload that cannot be held read-only must not run"
+  assert_contains "$ERR" "read-only" "and must say why"
+}
+
+t_offload_requires_a_prompt() {
+  run_wrapper offload --dir "$SANDBOX"
+  assert_eq 64 "$RC" "a missing prompt is a usage error"
+}
+
+t_offload_rejects_a_bad_budget() {
+  run_wrapper offload --dir "$SANDBOX" --budget soon "q"
+  assert_eq 64 "$RC" "--budget takes seconds"
+}
+
+t_offload_warns_about_token_files_in_a_root() {
+  mkdir -p "$SANDBOX/tokens"
+  echo '{}' > "$SANDBOX/tokens/refresh-token.json"
+  export FAKE_AGY_RESPONSE="ok"
+  run_wrapper offload --dir "$SANDBOX" "q"
+  assert_contains "$ERR" "refresh-token.json" "a token store in a root must be flagged"
+  assert_contains "$ERR" "Narrow --dir" "with the remedy"
+}
+
+# -------------------------------------------------------------- fanout ----
+t_fanout_runs_several_prompts() {
+  export FAKE_AGY_RESPONSE="an answer" FAKE_AGY_ARGV_APPEND=1
+  run_wrapper fanout --dir "$SANDBOX" --prompt "where is auth" --prompt "where is logging" --throttle 2
+  assert_eq 0 "$RC" "fanout should succeed"
+  assert_contains "$OUT" "## job1" "answers are grouped by label"
+  assert_contains "$OUT" "## job2" "one group per job"
+  assert_contains "$ERR" "2 jobs" "the summary counts the jobs"
+}
+
+t_fanout_reads_a_jobs_file() {
+  export FAKE_AGY_RESPONSE="an answer" FAKE_AGY_ARGV_APPEND=1
+  cat > "$SANDBOX/jobs.json" <<JSON
+[
+  { "label": "auth",    "dir": "$SANDBOX", "prompt": "where is auth",    "model": "fast" },
+  { "label": "billing", "dir": "$SANDBOX", "prompt": "where is billing", "model": "deep" }
+]
+JSON
+  run_wrapper fanout --jobs "$SANDBOX/jobs.json" --throttle 2
+  assert_eq 0 "$RC" "fanout --jobs should succeed"
+  assert_contains "$OUT" "## auth  [fast]" "per-job labels and models are shown"
+  assert_contains "$OUT" "## billing  [deep]" "both jobs are reported"
+  argv_has "gemini-3.8-flash-low" || fail_msg "the fast job should resolve to Flash Low"
+  argv_has "gemini-3.1-pro-high"  || fail_msg "the deep job should resolve to Pro High"
+}
+
+t_fanout_forwards_per_job_add_dirs() {
+  mkdir -p "$SANDBOX/lib" "$SANDBOX/vendor"
+  export FAKE_AGY_RESPONSE="an answer" FAKE_AGY_ARGV_APPEND=1
+  cat > "$SANDBOX/jobs.json" <<JSON
+[
+  { "label": "span", "dir": "$SANDBOX/lib", "prompt": "q",
+    "addDir": ["$SANDBOX/vendor"] }
+]
+JSON
+  run_wrapper fanout --jobs "$SANDBOX/jobs.json"
+  assert_eq 0 "$RC" "fanout with addDir should succeed"
+  argv_has "$(cd "$SANDBOX/vendor" && pwd)" || fail_msg "addDir must become a workspace root"
+}
+
+t_fanout_explains_a_misescaped_windows_path() {
+  printf '[{"label":"x","dir":"C:\Data\backend","prompt":"p"}]\n' > "$SANDBOX/bad.json"
+  run_wrapper fanout --jobs "$SANDBOX/bad.json"
+  assert_eq 64 "$RC" "an unparseable jobs file is a usage error"
+  assert_contains "$ERR" "mis-escaped" "the Windows-path trap must be named"
+}
+
+t_fanout_requires_work() {
+  run_wrapper fanout --dir "$SANDBOX"
+  assert_eq 64 "$RC" "fanout with no jobs is a usage error"
+}
+
+# -------------------------------------------------------------- review ----
+t_review_sends_the_diff_as_context_not_argv() {
+  mkdir -p "$SANDBOX/repo"
+  ( cd "$SANDBOX/repo" \
+    && git init -q . \
+    && git config user.email t@e.st && git config user.name test \
+    && echo one > f.txt && git add f.txt && git commit -qm init \
+    && echo DIFF-BODY-MARKER >> f.txt ) >/dev/null 2>&1
+  export FAKE_AGY_RESPONSE="LOW | f.txt:2 | fine"
+  ( cd "$SANDBOX/repo" && bash "$WRAPPER" review "focus" ) >/dev/null 2>&1
+  argv_contains "context.md" || fail_msg "the diff must go in as a context file"
+  if argv_contains "DIFF-BODY-MARKER"; then
+    fail_msg "the diff body must not travel on the command line"
+  fi
+}
+
+t_review_omits_dotenv_but_keeps_the_example() {
+  mkdir -p "$SANDBOX/repo"
+  ( cd "$SANDBOX/repo" \
+    && git init -q . \
+    && git config user.email t@e.st && git config user.name test \
+    && echo one > app.js && echo "SECRET=old" > .env && echo "KEY=x" > .env.example \
+    && git add -A && git commit -qm init \
+    && echo two >> app.js \
+    && echo "SECRET=LEAKED-VALUE" > .env \
+    && echo "KEY2=y" >> .env.example ) >/dev/null 2>&1
+  export FAKE_AGY_RESPONSE="ok"
+  local err
+  err="$( ( cd "$SANDBOX/repo" && bash "$WRAPPER" review ) 2>&1 >/dev/null )"
+  assert_contains "$err" "omitted from the review" ".env must be dropped, loudly"
+  if argv_contains "LEAKED-VALUE"; then fail_msg "a .env value must never reach the prompt"; fi
+}
+
+t_review_names_untracked_files() {
+  mkdir -p "$SANDBOX/repo"
+  ( cd "$SANDBOX/repo" \
+    && git init -q . \
+    && git config user.email t@e.st && git config user.name test \
+    && echo one > f.txt && git add f.txt && git commit -qm init \
+    && echo two >> f.txt \
+    && echo new > brand-new-file.js ) >/dev/null 2>&1
+  export FAKE_AGY_RESPONSE="ok"
+  ( cd "$SANDBOX/repo" && bash "$WRAPPER" review ) >/dev/null 2>&1
+  argv_contains "brand-new-file.js" || fail_msg "new files are not in the diff and must be named"
+}
+
+# ------------------------------------------------------ second opinion ----
+t_second_opinion_runs_claude_read_only() {
+  install_fake_claude
+  export FAKE_CLAUDE_RESULT="the independent answer"
+  run_wrapper second-opinion --model sonnet --dir "$SANDBOX" "why does it deadlock"
+  assert_eq 0 "$RC" "the second opinion should succeed"
+  assert_contains "$OUT" "the independent answer" "the answer comes back"
+  claude_argv_has "plan"            || fail_msg "it must run in plan mode"
+  claude_argv_has "Read,Grep,Glob"  || fail_msg "it must be read-only: Read, Grep, Glob"
+  claude_argv_has "sonnet"          || fail_msg "--model must be forwarded"
+  assert_contains "$ERR" "cost=" "telemetry reports the cost"
+}
+
+t_second_opinion_passes_context_on_stdin() {
+  install_fake_claude
+  run_wrapper_stdin "ESTABLISHED-FACT" second-opinion --dir "$SANDBOX" --stdin "why"
+  assert_eq 0 "$RC" "a second opinion with context should succeed"
+  assert_contains "$(cat "$FAKE_CLAUDE_STDIN")" "ESTABLISHED-FACT" "context must reach claude on stdin"
+  assert_contains "$(cat "$FAKE_CLAUDE_STDIN")" "read-only" "the guard must be prepended"
+}
+
+t_second_opinion_reports_an_auth_failure() {
+  install_fake_claude
+  export FAKE_CLAUDE_ERROR=1
+  run_wrapper second-opinion --dir "$SANDBOX" "why"
+  assert_eq 1 "$RC" "an error is a failure"
+  assert_contains "$ERR" "credentials" "and suggests the fix"
+}
+
+t_second_opinion_without_claude_exits_127() {
+  # A PATH narrow enough to hide claude still has to be able to run bash.
+  local bin_dir minimal outf errf
+  bin_dir="$(dirname "$(command -v bash)")"
+  minimal="$SANDBOX/bin:$bin_dir"
+  if PATH="$minimal" command -v claude >/dev/null 2>&1; then
+    return 0   # claude sits next to bash here; nothing to assert
+  fi
+  outf="$(mktemp)"; errf="$(mktemp)"
+  RC=0
+  PATH="$minimal" bash "$WRAPPER" second-opinion --dir "$SANDBOX" "why" >"$outf" 2>"$errf" || RC=$?
+  ERR="$(cat "$errf")"; rm -f "$outf" "$errf"
+  assert_eq 127 "$RC" "a missing claude is exit 127"
+  assert_contains "$ERR" "not on PATH" "and says so"
+}
+
+t_second_opinion_rejects_a_bad_effort() {
+  install_fake_claude
+  run_wrapper second-opinion --effort turbo "why"
+  assert_eq 64 "$RC" "an invalid effort is a usage error"
+}
+
+# --------------------------------------------------------- capabilities ----
+t_check_reports_offload_capabilities() {
+  run_wrapper check
+  assert_contains "$OUT" '"planMode": true'   "a modern build supports plan mode"
+  assert_contains "$OUT" '"jsonOutput": true' "and structured output"
+  assert_contains "$OUT" '"offload": true'    "so offloading is available"
+}
+
+t_check_reports_offload_unavailable_on_old_builds() {
+  export FAKE_AGY_MODE=old-no-mode
+  run_wrapper check
+  assert_contains "$OUT" '"planMode": false' "an old build has no plan mode"
+  assert_contains "$OUT" '"offload": false'  "so offloading is unavailable"
+}
+
 # =================================================================== run ===
 printf '\n%s\n' "agy-run.sh test suite"
 
@@ -817,14 +1160,53 @@ it "check: reports capabilities"                        t_check_reports_capabili
 it "check: reports an old build"                        t_check_reports_old_build
 it "check: reports a missing binary"                    t_check_reports_missing_binary
 it "check: emits valid JSON"                            t_check_output_is_valid_json
+it "check: reports offload capabilities"                t_check_reports_offload_capabilities
+it "check: no offload on old builds"                    t_check_reports_offload_unavailable_on_old_builds
 it "review: requires a diff"                            t_review_requires_a_diff
 it "review: honours --model"                            t_review_accepts_model_flag
+it "review: diff goes in as context, not argv"           t_review_sends_the_diff_as_context_not_argv
+it "review: omits .env, keeps .env.example"             t_review_omits_dotenv_but_keeps_the_example
+it "review: names untracked files"                      t_review_names_untracked_files
 
 printf '\n%s\n' "image"
 it "image: rejects a non-image IMAGE_PATH"              t_image_rejects_non_image_path_from_model
 it "image: copies a genuine image"                      t_image_copies_real_image
 it "image: requires a description"                      t_image_requires_description
 it "image: warns when no path is found"                 t_image_warns_when_no_path_found
+
+printf '\n%s\n' "offload"
+it "offload: runs agy read-only in plan mode"              t_offload_runs_read_only
+it "offload: injects the read-only guard"                  t_offload_injects_the_guard
+it "offload: adds every workspace root"                    t_offload_adds_workspace_roots
+it "offload: --add-dir rejects a file"                     t_offload_rejects_a_file_as_add_dir
+it "offload: defaults to the balanced tier"                t_offload_defaults_to_the_balanced_tier
+it "offload: honours an explicit --model"                  t_offload_honours_an_explicit_model
+it "offload: --tier is a synonym for --model"              t_offload_accepts_tier_as_a_synonym
+it "offload: reports telemetry on stderr"                  t_offload_reports_telemetry
+it "offload: marks a partial answer"                       t_offload_marks_a_partial_answer
+it "offload: explains an auto-denied command"              t_offload_explains_an_auto_denied_shell_command
+it "offload: falls back on a capacity failure"             t_offload_falls_back_on_a_capacity_failure
+it "offload: does not retry other failures"                t_offload_does_not_retry_other_failures
+it "offload: stdin becomes a context file"                 t_offload_puts_stdin_in_a_context_file
+it "offload: ignores stdin without --stdin"                t_offload_ignores_stdin_without_the_flag
+it "offload: fails closed without plan mode"               t_offload_fails_closed_without_plan_mode
+it "offload: requires a prompt"                            t_offload_requires_a_prompt
+it "offload: rejects a bad --budget"                       t_offload_rejects_a_bad_budget
+it "offload: warns about token files in a root"            t_offload_warns_about_token_files_in_a_root
+
+printf '\n%s\n' "fanout"
+it "fanout: runs several prompts"                          t_fanout_runs_several_prompts
+it "fanout: reads a jobs file"                             t_fanout_reads_a_jobs_file
+it "fanout: forwards per-job addDir"                    t_fanout_forwards_per_job_add_dirs
+it "fanout: explains a mis-escaped Windows path"           t_fanout_explains_a_misescaped_windows_path
+it "fanout: requires work"                                 t_fanout_requires_work
+
+printf '\n%s\n' "second opinion"
+it "second-opinion: runs claude read-only"                 t_second_opinion_runs_claude_read_only
+it "second-opinion: context goes on stdin"                 t_second_opinion_passes_context_on_stdin
+it "second-opinion: reports an auth failure"               t_second_opinion_reports_an_auth_failure
+it "second-opinion: exits 127 without claude"              t_second_opinion_without_claude_exits_127
+it "second-opinion: rejects a bad --effort"                t_second_opinion_rejects_a_bad_effort
 
 printf '\n%s\n' "security"
 it "security: cache dir is not world-readable"          t_cache_dir_is_not_world_readable

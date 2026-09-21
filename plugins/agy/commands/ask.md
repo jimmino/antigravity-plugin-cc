@@ -57,3 +57,6 @@ Notes:
 - If the user's request is empty, ask what they want to ask Antigravity.
 - For multi-step or long-running work, suggest `/agy:delegate`, which routes
   through the `agy:runner` subagent and supports `--background`.
+- `ask` is a plain pass-through: the run is **not** held read-only, carries no
+  guard, and returns no telemetry. When the point is to have `agy` *read* a
+  codebase and hand back a short cited answer, use `/agy:offload` instead.

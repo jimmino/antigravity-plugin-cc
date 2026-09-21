@@ -26,11 +26,24 @@ just Bash and `agy`.
   `generate_image` tool (Imagen under the hood). Optional `--name` and
   `--output`.
 - **`/agy:review [--model <m>] [focus]`** — ask Antigravity to review your
-  current `git diff`.
+  current `git diff`, read-only, with the diff piped in as a context file.
+- **`/agy:offload [--model <m>] [--dir <p>] [--add-dir <p>] <question>`** — a
+  read-only bulk read: `agy` reads the files, a short cited answer comes back,
+  and the bulk tokens never enter your Claude Code context. Long context is
+  piped in behind `--stdin`.
+- **`/agy:fanout (--jobs <f> | --prompt <t>...) [--throttle N]`** — several
+  offload jobs at once. Each call takes 1-3 minutes, so concurrency is the win.
+- **`/agy:second-opinion [--model opus|sonnet|haiku] <question>`** — an
+  independent answer from a fresh Claude Code running read-only in plan mode,
+  for when you want a view that has not seen your conversation.
 - **`/agy:help`** — show all commands and the live model/alias table.
 - **`agy:runner` subagent** — thin forwarding wrapper around the Antigravity
   CLI; available as `subagent_type: "agy:runner"` for programmatic
   delegation.
+- **`agy:offload` subagent** — the read-only offload path, for delegating a
+  wide read without its output landing in the parent context.
+- **`agy:offloading` skill** — the doctrine behind the offload commands: what
+  is worth offloading, how to shape the prompt, how far to trust the answer.
 
 ## Requirements
 
@@ -108,6 +121,62 @@ Stage or make some changes, then:
 /agy:review
 /agy:review focus on error handling and concurrency safety
 ```
+
+### Offload a bulk read
+
+When the question spans more source than is worth pulling into your context,
+hand the reading to `agy` and get back a short cited answer:
+
+```text
+/agy:offload where is OTP expiry enforced, and what happens when it lapses
+/agy:offload --model fast --dir C:/Data/App/api which handlers write to the audit log
+```
+
+The answer arrives with a telemetry line on stderr naming the model, the
+seconds and the tokens spent *there* rather than here. Open the cited lines
+before acting on them: the offload is evidence, not verdict, and it cannot
+prove absence — it is good at finding things and poor at noticing what is
+missing.
+
+Long context — a diff, a log excerpt, background for the question — is piped in
+rather than put in the prompt:
+
+```bash
+git --no-pager diff HEAD -- src/api |   bash plugins/agy/scripts/agy-run.sh offload --stdin --dir . "which of these changes can return a wrong result"
+```
+
+The one rule: **offload semantics, never arithmetic.** The run is read-only,
+which means no shell, and without a shell the model cannot count, sum, diff or
+list a directory — it will spend six figures of tokens discovering that. Do
+those yourself. The `agy:offloading` skill has the measurements.
+
+### Fan several offloads out at once
+
+Each call takes 1-3 minutes, so run them concurrently:
+
+```text
+/agy:fanout --prompt "where is auth handled" --prompt "where is rate limiting"
+```
+
+Per-job directories and models go in a jobs file:
+
+```json
+[
+  { "label": "api", "dir": "C:/Data/App/api", "prompt": "...", "model": "balanced" },
+  { "label": "web", "dir": "C:/Data/App/web", "prompt": "...", "model": "fast" }
+]
+```
+
+### Get an independent second opinion
+
+```text
+/agy:second-opinion why does the retry loop in src/sync.ts deadlock
+```
+
+This one does not go through `agy` at all: it runs a fresh Claude Code headless
+with only `Read`, `Grep` and `Glob` in plan mode, so it can search rather than
+brute-force read, and it has not seen your conversation. Give it the facts and
+what you ruled out — not your current best guess — then compare.
 
 ### Pick a specific model
 
@@ -209,6 +278,15 @@ Under the hood, the plugin is a thin wrapper around your local `agy` install:
 Claude Code  →  /agy:*  →  agy:runner subagent  →  agy-run.sh  →  agy -p "..."
 ```
 
+The offload commands take a second path through the same wrapper:
+
+```
+/agy:offload      →  agy-run.sh offload  →  agy --mode plan --output-format json
+/agy:fanout       →  N x the above, in parallel
+/agy:review       →  the working diff, piped in as a context file
+/agy:second-opinion  →  claude -p --permission-mode plan --tools Read,Grep,Glob
+```
+
 - The plugin does **not** ship its own Antigravity runtime — it uses your
   local `agy` binary, your local auth, and your local config.
 - The wrapper script
@@ -217,6 +295,31 @@ Claude Code  →  /agy:*  →  agy:runner subagent  →  agy-run.sh  →  agy -p
 - The `agy:runner` subagent is a *forwarder*: it invokes the wrapper exactly
   once per request and returns Antigravity's output verbatim. No
   reinterpretation.
+
+### The offload path
+
+`/agy:ask` is a plain pass-through. The offload commands are not: they
+
+- run `agy --mode plan` with slash commands disabled, so the model **cannot
+  write files or run commands** even in a folder `agy` is trusted in. On a build
+  with no `--mode` flag they refuse to run rather than send an unrestricted
+  agent into your repository;
+- prepend a guard that bans writes and shell commands, skips `.env` files other
+  than `.env.example`, treats file contents as data rather than instructions,
+  and demands `path:line` citations or an explicit `UNKNOWN`;
+- take long context on **stdin** (behind `--stdin`), writing it to a temp file
+  that becomes a workspace root — the prompt itself travels on the command
+  line, which Windows caps at ~32K characters;
+- parse `agy --output-format json` for one telemetry line per call
+  (`label | model | seconds | in= out=`), and tell a real answer from the
+  opening narration of a turn cut short by an auto-denied shell command;
+- fall back down a chain of aliases on a capacity failure (503/429) and say
+  when the answer came from a weaker model than requested. Timeouts are not
+  retried.
+
+The whole chain runs under a 540-second budget, below Claude Code's 600-second
+tool kill. `python3` is used for JSON parsing; without it the offload still
+runs, but with no telemetry and no partial-answer detection.
 
 ## Configuration
 
@@ -245,6 +348,8 @@ to get the clean one.
 | `AGY_ALIASES_FILE` | `${XDG_CONFIG_HOME:-~/.config}/agy-plugin/aliases.conf` | Your alias definitions. |
 | `AGY_QUIET` | unset | `1` silences the `[wrapper] model: …` resolution line. |
 | `AGY_LOCK_WAIT_SECONDS` | `600` | Legacy path only: how long to wait for the settings lock. |
+| `AGY_OFFLOAD_BUDGET` | `540` | Seconds for a whole offload, retries included. |
+| `AGY_OFFLOAD_MIN_ATTEMPT` | `120` | Do not start another attempt with less budget left than this. |
 
 ## Development
 
