@@ -1,0 +1,76 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bash version
+        run: bash --version | head -1
+
+      # macOS ships bash 3.2, which is the oldest shell this wrapper claims to
+      # support — running the suite there is the compatibility check.
+      - name: Run test suite
+        run: bash tests/run-tests.sh
+
+  shellcheck:
+    name: shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Lint wrapper and tests
+        run: |
+          shellcheck -s bash -e SC2016 plugins/agy/scripts/agy-run.sh
+          shellcheck -s bash -e SC2016,SC2329,SC2317,SC1090 tests/run-tests.sh tests/fixtures/fake-agy tests/fixtures/fake-claude
+
+  manifest:
+    name: manifests are valid JSON
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate plugin manifests
+        run: |
+          python3 -c "import json;json.load(open('.claude-plugin/marketplace.json'))"
+          python3 -c "import json;json.load(open('plugins/agy/.claude-plugin/plugin.json'))"
+      - name: Versions must match
+        run: |
+          a=$(python3 -c "import json;print(json.load(open('plugins/agy/.claude-plugin/plugin.json'))['version'])")
+          b=$(python3 -c "import json;print(json.load(open('.claude-plugin/marketplace.json'))['metadata']['version'])")
+          c=$(python3 -c "import json;print(json.load(open('.claude-plugin/marketplace.json'))['plugins'][0]['version'])")
+          echo "plugin=$a marketplace=$b entry=$c"
+          test "$a" = "$b" && test "$a" = "$c"
+
+  no-hardcoded-models:
+    name: no hardcoded model names in the wrapper
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # The whole point of 0.5.0: the catalogue lives in `agy models`, not here.
+      # A concrete version string creeping back into the wrapper is a regression.
+      - name: Grep for version-pinned model names
+        run: |
+          if grep -nEi '(gemini|claude|gpt)[-_ ]?[a-z]*[-_ ]?[0-9]+\.[0-9]' \
+               plugins/agy/scripts/agy-run.sh; then
+            echo "::error::a versioned model name is hardcoded in agy-run.sh"
+            exit 1
+          fi
+          echo "clean: no versioned model names in the wrapper"

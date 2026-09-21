@@ -1,6 +1,6 @@
 ---
 description: Delegate a thorough research investigation to the agy:runner subagent
-argument-hint: "[--background] [--model <alias>] <topic or question>"
+argument-hint: "[--background] [--model <alias|id>] [--effort low|medium|high] <topic or question>"
 allowed-tools: Agent
 ---
 
@@ -26,8 +26,8 @@ sections (Background, Key findings, Caveats, Sources).
 Topic: <stripped user request here>
 ```
 
-(Strip any routing flags — `--background`, `--model <alias>` — from the
-topic text before injecting it.)
+(Strip any routing flags — `--background`, `--model <value>`,
+`--effort <level>` — from the topic text before injecting it.)
 
 Then invoke the `agy:runner` subagent with that prompt as
 `subagent_type: "agy:runner"`.
@@ -37,15 +37,14 @@ Then invoke the `agy:runner` subagent with that prompt as
 - If the request contains `--background`, launch the subagent with
   `run_in_background: true`. Research is often long-running — prefer
   background unless the user explicitly asked for foreground.
-- If the request contains `--model <alias>`, forward it to the subagent so
-  it can be appended to the wrapper call as `--model <alias>` (placed
-  **before** the prompt argument). If no model is given, leave the choice to
-  whatever the TUI is currently set to (a reasoning-strong model like
-  `pro` or `opus` works well for research).
+- If the request contains `--model <value>` or `--effort <level>`, forward
+  them to the subagent so they can be placed **before** the prompt argument.
+- If no model is given, leave the choice to whatever the TUI is currently set
+  to. For research, a reasoning-strong alias such as `deep` (newest Pro at
+  high effort) or `opus` works well.
 
-Aliases: `flash-low`, `flash-medium`, `flash`, `pro-low`, `pro`, `sonnet`,
-`opus`, `gpt-oss`. Canonical TUI strings (e.g. `"Claude Opus 4.6 (Thinking)"`)
-are also accepted. Run `/agy:help` for the full table.
+Aliases resolve against the live catalogue — run `/agy:models` to see it
+rather than reciting model names from memory.
 
 ## Response style
 

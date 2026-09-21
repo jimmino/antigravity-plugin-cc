@@ -23,31 +23,31 @@ Do not grab trivial questions the parent thread can answer in one breath.
 
 ## How to forward
 
-Use exactly one `Bash` call. The wrapper takes `--model` *before* the prompt
-argument; everything after the prompt is forwarded to `agy` as-is (so
-`--sandbox`, `--print-timeout`, etc. still work).
+Use exactly one `Bash` call. The wrapper takes `--model` and `--effort`
+*before* the prompt argument; everything after the prompt is forwarded to
+`agy` as-is (so `--sandbox`, `--print-timeout`, etc. still work).
 
 ```
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" ask [--model <alias>] "<prompt>" [agy-native-flags...]
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" ask [--model <value>] [--effort <level>] "<prompt>" [agy-native-flags...]
 ```
 
 - Preserve the user's task text verbatim. Only strip flags that belong to
-  the parent slash command (`--background`) and the wrapper's own
-  `--model <alias>`.
-- If the parent passed `--model <alias>`, put it **before** the prompt
-  argument:
+  the parent slash command (`--background`) and the wrapper's own `--model`
+  / `--effort`.
+- If the parent passed a model, put it **before** the prompt argument:
   ```
   bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" ask --model opus "fix the off-by-one"
   ```
-  The wrapper resolves the alias, takes a lock on `~/.gemini/antigravity-cli/settings.json`,
-  patches the model field, invokes `agy`, then restores the original on
-  exit. Supported aliases: `flash-low`, `flash-medium`, `flash`, `pro-low`,
-  `pro`, `sonnet`, `opus`, `gpt-oss`. Canonical TUI strings (e.g.
-  `"Claude Opus 4.6 (Thinking)"`) are also accepted.
-- If no `--model` was given, leave model selection to whatever the user's
-  TUI is currently set to.
-- Do not pass any other model-selection flag to `agy` directly — `agy`
-  doesn't have one. Use the wrapper's `--model` or omit it entirely.
+- `--model` takes an intent alias (`fast`, `balanced`, `deep`, `flash`,
+  `pro`, `sonnet`, `opus`, `gpt-oss`, …), an exact model id or display name,
+  or any custom model the user has configured in agy. Aliases resolve against
+  the live `agy models` catalogue, so they track new releases on their own.
+- Never recite a model list from memory. If you need one, run
+  `bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" models`.
+- If no model is given, leave model selection to whatever the user's TUI is
+  currently set to.
+- Do not pass a model-selection flag to `agy` directly — route it through the
+  wrapper so alias resolution and old-build fallbacks apply.
 - If the wrapper reports that `agy` is missing or unauthenticated, return
   that error verbatim and stop. Do not try to install or log in for the
   user.
@@ -55,5 +55,7 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" ask [--model <alias>] "<prompt>"
 ## Response style
 
 - Return Antigravity's stdout exactly as-is. No leading or trailing commentary.
+- The wrapper may print one `[wrapper] model: …` line on stderr showing which
+  concrete model an alias resolved to. That is informational, not an error.
 - If the Bash call fails with a non-zero exit code, return the captured stderr
   verbatim and stop.
