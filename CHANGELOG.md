@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- **Aliases skip preview and experimental models.** "Newest wins" would have
+  moved `flash` onto a `…-preview` id the day one appeared, and previews are
+  rate-limited and get withdrawn. Aliases now ignore any model whose id or
+  label is marked `preview`, `exp`, `experimental`, `beta`, `alpha`, `nightly`
+  or `canary`. An exact id still works, and `AGY_ALLOW_PREVIEW=1` restores the
+  old behaviour. A family with only previews fails with a hint, rather than
+  resolving to one.
+
+### Fixed
+- **Effort aliases no longer guess when the suffixes change.** When no model
+  in a family ended in the requested `-low`/`-medium`/`-high`, the resolver
+  fell back to the newest model in the family, so if the catalogue renamed its
+  variants, `fast` and `balanced` would quietly have resolved to the same model.
+  Several unreadable variants are now an error that lists them. A lone model
+  with no variants is still used, with a note that effort does not apply, and
+  an alias that has to fall back to an older generation for the right effort
+  now says so.
+
 ## [0.6.1] - 2026-09-22
 
 ### Fixed

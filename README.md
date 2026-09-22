@@ -213,6 +213,19 @@ The three tier aliases are the ones worth learning:
 `--effort low|medium|high` picks a reasoning-effort variant independently and
 is passed straight to `agy --effort`.
 
+Aliases only land on models they can vouch for:
+
+- **Previews and experiments are skipped.** An id or display name marked
+  `preview`, `exp`, `experimental`, `beta`, `alpha`, `nightly` or `canary` is
+  never picked by an alias, so `flash` stays on the newest *stable* Flash while
+  a new generation is in preview. Pass the id directly to use one, or set
+  `AGY_ALLOW_PREVIEW=1` to let aliases consider them.
+- **Effort is never guessed.** If the newest models in a family stop using
+  `-low`/`-medium`/`-high` suffixes, `fast` and `balanced` fail with the
+  candidate list instead of quietly resolving to the same model. If an older
+  generation still has the right variant, the alias uses it and prints a
+  `[wrapper] note:` saying it fell a generation behind.
+
 Because an alias deliberately does not name a version, the wrapper prints the
 model it landed on so the choice stays auditable:
 
@@ -347,6 +360,7 @@ to get the clean one.
 | `AGY_PLUGIN_CACHE_DIR` | `${XDG_CACHE_HOME:-~/.cache}/agy-plugin` | Where the catalogue cache lives. |
 | `AGY_ALIASES_FILE` | `${XDG_CONFIG_HOME:-~/.config}/agy-plugin/aliases.conf` | Your alias definitions. |
 | `AGY_QUIET` | unset | `1` silences the `[wrapper] model: …` resolution line. |
+| `AGY_ALLOW_PREVIEW` | unset | `1` lets built-in aliases resolve to preview and experimental models. |
 | `AGY_LOCK_WAIT_SECONDS` | `600` | Legacy path only: how long to wait for the settings lock. |
 | `AGY_OFFLOAD_BUDGET` | `540` | Seconds for a whole offload, retries included. |
 | `AGY_OFFLOAD_MIN_ATTEMPT` | `120` | Do not start another attempt with less budget left than this. |

@@ -289,6 +289,18 @@ catalogue_lookup() {
 # LC_ALL=C: a UTF-8 collation skips punctuation, so it compared "3flash" with
 # "31flash" and ranked 3 above 3.1.
 _pick_newest() {
+  _version_keyed | LC_ALL=C sort | tail -n1 | cut -f3-
+}
+
+# Every id that shares the highest version in the input, one per line.
+_newest_version_ids() {
+  _version_keyed | LC_ALL=C sort | awk -F'\t' '
+    { v[NR] = $1; id[NR] = $3 }
+    END { for (i = 1; i <= NR; i++) if (v[i] == v[NR]) print id[i] }'
+}
+
+# "<version key><TAB><effort rank><TAB><id>" per id, for the two above.
+_version_keyed() {
   awk '
     function version(s,   out, c, num, i, n) {
       out=""; num=""; n=length(s)
@@ -313,34 +325,83 @@ _pick_newest() {
       return 0
     }
     length($0) > 0 { print version($0) "\t" effort_rank($0) "\t" $0 }
-  ' | LC_ALL=C sort | tail -n1 | cut -f3-
+  '
 }
 
-# Resolve "family + optional effort" against the live catalogue.
+# Ids a built-in alias may land on. Previews and experiments are left out:
+# they are rate-limited, change without notice and get withdrawn, so an alias
+# that quietly moved onto one would stop meaning "the current model". An exact
+# id or display name still reaches them, and AGY_ALLOW_PREVIEW=1 lets aliases
+# consider them too. The id and the label are both checked, since a catalogue
+# may mark a preview in only one of them.
+_alias_candidate_ids() {
+  catalogue | awk -F'\t' -v allow="${AGY_ALLOW_PREVIEW:-0}" '
+    NF >= 2 {
+      if (allow != "1") {
+        s = " " tolower($1 " " $2) " "
+        if (s ~ /[^a-z](preview|exp|experimental|beta|alpha|nightly|canary)[^a-z]/) next
+      }
+      print $1
+    }'
+}
+
+# Resolve "family + optional effort" against the live catalogue. Sets
+# FAMILY_ID, plus FAMILY_NOTE when the pick needs explaining on stderr.
+# Returns 1 when the family is absent, 3 when only previews match, and 2 when
+# an effort was asked for but the newest models in the family carry variants
+# this wrapper cannot read as low/medium/high — guessing there would hand
+# `fast` and `balanced` the same model. FAMILY_CANDIDATES lists the models
+# behind a 2 or a 3.
+FAMILY_ID=""
+FAMILY_NOTE=""
+FAMILY_CANDIDATES=""
 _resolve_family() {
   local family="$1" effort="${2:-}"
+  FAMILY_ID=""; FAMILY_NOTE=""; FAMILY_CANDIDATES=""
   local ids
-  ids="$(catalogue_ids | grep -iE -- "$family" || true)"
-  [ -n "$ids" ] || return 1
+  ids="$(_alias_candidate_ids | grep -iE -- "$family" || true)"
+  if [ -z "$ids" ]; then
+    FAMILY_CANDIDATES="$(catalogue_ids | grep -iE -- "$family" || true)"
+    [ -n "$FAMILY_CANDIDATES" ] && return 3
+    return 1
+  fi
 
-  if [ -n "$effort" ]; then
-    local scoped
-    scoped="$(printf '%s\n' "$ids" | grep -iE -- "-${effort}\$" || true)"
-    if [ -n "$scoped" ]; then
-      printf '%s\n' "$scoped" | _pick_newest
-      return 0
+  if [ -z "$effort" ]; then
+    # Prefer ids that carry no effort suffix at all (e.g. a single Claude
+    # entry), else just the newest in the family.
+    local plain
+    plain="$(printf '%s\n' "$ids" | grep -ivE -- '-(low|medium|high)$' || true)"
+    if [ -n "$plain" ]; then
+      FAMILY_ID="$(printf '%s\n' "$plain" | _pick_newest)"
+    else
+      FAMILY_ID="$(printf '%s\n' "$ids" | _pick_newest)"
     fi
+    return 0
   fi
 
-  # No effort variant for this family (e.g. a single Claude entry): prefer ids
-  # that carry no effort suffix at all, else just the newest in the family.
-  local plain
-  plain="$(printf '%s\n' "$ids" | grep -ivE -- '-(low|medium|high)$' || true)"
-  if [ -n "$plain" ]; then
-    printf '%s\n' "$plain" | _pick_newest
-  else
-    printf '%s\n' "$ids" | _pick_newest
+  local newest scoped
+  newest="$(printf '%s\n' "$ids" | _newest_version_ids)"
+  scoped="$(printf '%s\n' "$ids" | grep -iE -- "-${effort}\$" || true)"
+  if [ -n "$scoped" ]; then
+    FAMILY_ID="$(printf '%s\n' "$scoped" | _pick_newest)"
+    # Right effort, but possibly a generation behind: say so rather than let
+    # the alias sit on an old model unnoticed.
+    if ! grep -qFx -- "$FAMILY_ID" <<<"$newest"; then
+      FAMILY_NOTE="the newest $family ($(tr '\n' ' ' <<<"$newest" | sed 's/ *$//')) has no '$effort' variant; using $FAMILY_ID"
+    fi
+    return 0
   fi
+
+  # No id says "-$effort". A lone newest model has no variants to choose
+  # between, so effort simply does not apply; several mean the variants are
+  # named in a way this wrapper does not understand, and it will not guess.
+  if [ "$(grep -c . <<<"$newest")" -eq 1 ]; then
+    FAMILY_ID="$newest"
+    FAMILY_NOTE="$FAMILY_ID has no effort variants, so '$effort' does not apply"
+    return 0
+  fi
+  FAMILY_CANDIDATES="$newest"
+  return 2
 }
 
 # --------------------------------------------------------- user aliases ----
@@ -477,17 +538,33 @@ resolve_model() {
   # 3. Built-in intent alias resolved against the live catalogue.
   local spec
   if spec="$(builtin_alias_spec "$input" 2>/dev/null)" && [ -n "$spec" ]; then
-    local family="${spec%%|*}" effort="${spec#*|}" id
-    if id="$(_resolve_family "$family" "$effort" 2>/dev/null)" && [ -n "$id" ]; then
+    local family="${spec%%|*}" effort="${spec#*|}" rc=0 c
+    _resolve_family "$family" "$effort" || rc=$?
+    if [ "$rc" -eq 0 ] && [ -n "$FAMILY_ID" ]; then
       local look
-      if look="$(catalogue_lookup "$id" 2>/dev/null)" && [ -n "$look" ]; then
+      if look="$(catalogue_lookup "$FAMILY_ID" 2>/dev/null)" && [ -n "$look" ]; then
         RESOLVED_ID="${look%%$'\t'*}"
         RESOLVED_LABEL="${look#*$'\t'}"
       else
-        RESOLVED_ID="$id"; RESOLVED_LABEL="$id"
+        RESOLVED_ID="$FAMILY_ID"; RESOLVED_LABEL="$FAMILY_ID"
       fi
       RESOLVED_VIA="builtin:$input"
+      [ -z "$FAMILY_NOTE" ] || echo "[wrapper] note: $input: $FAMILY_NOTE" >&2
       return 0
+    fi
+    if [ "$rc" -eq 2 ]; then
+      echo "error: alias '$input' asks for $effort-effort $family, but the newest $family models" >&2
+      echo "       do not name their variants low/medium/high, so the wrapper will not guess:" >&2
+      while IFS= read -r c; do echo "         $c"; done <<<"$FAMILY_CANDIDATES" >&2
+      echo "       Pass one of them with --model, or pin '$input' to one in $AGY_ALIASES_FILE." >&2
+      exit 64
+    fi
+    if [ "$rc" -eq 3 ]; then
+      echo "error: alias '$input' matches only preview or experimental models:" >&2
+      while IFS= read -r c; do echo "         $c"; done <<<"$FAMILY_CANDIDATES" >&2
+      echo "       Aliases skip those by default. Pass one with --model, or set" >&2
+      echo "       AGY_ALLOW_PREVIEW=1 to let aliases pick them." >&2
+      exit 64
     fi
     if [ -z "$(catalogue)" ]; then
       echo "error: cannot resolve alias '$input' — no model catalogue available." >&2
@@ -540,6 +617,7 @@ print_model_table() {
     echo
     echo "Built-in aliases (case-insensitive, resolved against the list above):"
     builtin_alias_names | awk -F'\t' '{ printf "  %-28s %s\n", $1, $2 }'
+    echo "  (these skip preview and experimental models; AGY_ALLOW_PREVIEW=1 includes them)"
     local user_rows; user_rows="$(user_alias_names)"
     if [ -n "$user_rows" ]; then
       echo
