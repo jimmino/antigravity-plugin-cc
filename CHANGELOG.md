@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] - 2026-09-22
+
+### Fixed
+- **"Newest" no longer depends on the system locale.** Alias resolution sorted
+  with a bare `sort`, and a UTF-8 collation skips punctuation: it compared
+  `gemini3flash` with `gemini31flash` and ranked Gemini 3 above 3.1. Git Bash
+  and Ubuntu CI run with a codepoint locale, which hid it. The sort now runs
+  under `LC_ALL=C`.
+- **`claude` and `gemini` pick the newest version, not the last name
+  alphabetically.** The sort key was the whole id, and Claude ids put the
+  family before the version, so `claude` chose Sonnet 4.6 over Opus 5. The key
+  now leads with the version. A tie on version prefers the highest effort, so
+  `gemini` resolves to the newest Flash at high effort rather than at medium,
+  which only won because "medium" sorts after "high".
+- **`/agy:second-opinion` defaults to a 540-second timeout, down from 900.**
+  Claude Code kills a foreground tool call at 600 seconds, so the old default
+  let the harness kill the run before the wrapper's own timeout could fire and
+  report it. `--timeout` still raises it for a background run, and
+  `AGY_SECOND_OPINION_TIMEOUT` sets the default.
+
+### Changed
+- CI runs the test suite on Windows (Git Bash) as well as Linux and macOS.
+  Several code paths only run there: `cygpath` for the context file, CRLF from
+  native Python, and backslashes in fanout job files.
+
 ## [0.6.0] - 2026-09-20
 
 ### Added
