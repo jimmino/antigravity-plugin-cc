@@ -6,13 +6,13 @@
   },
   "metadata": {
     "description": "Antigravity CLI integration for Claude Code — delegate tasks to Google's `agy` from inside your editor.",
-    "version": "0.6.0"
+    "version": "0.6.1"
   },
   "plugins": [
     {
       "name": "agy",
       "description": "Use the Google Antigravity CLI (`agy`) from Claude Code — slash commands /agy:setup, /agy:models, /agy:ask, /agy:offload, /agy:fanout, /agy:second-opinion, /agy:delegate, /agy:research, /agy:review, /agy:image, /agy:help. Offload commands run agy read-only and keep the bulk tokens out of your context. Model selection is discovered from `agy models` at runtime, with intent aliases and user-defined aliases, so new model releases need no plugin update.",
-      "version": "0.6.0",
+      "version": "0.6.1",
       "author": {
         "name": "simplybychris",
         "url": "https://detechtive.pl"

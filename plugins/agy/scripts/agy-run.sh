@@ -280,22 +280,40 @@ catalogue_lookup() {
     }'
 }
 
-# Portable "newest wins" ordering: zero-pad every digit run so a plain lexical
-# sort orders 3.10 after 3.9 and we never depend on GNU `sort -V`.
+# Portable "newest wins" ordering, without GNU `sort -V`. The sort key leads
+# with the version alone — every digit run, zero-padded, so 3.10 beats 3.9 —
+# because Claude ids put the family name first, and sorting the whole id made
+# `claude-sonnet-4-6` outrank `claude-opus-5`. A tie on version prefers the
+# highest effort, then the id, so the pick is deterministic.
+#
+# LC_ALL=C: a UTF-8 collation skips punctuation, so it compared "3flash" with
+# "31flash" and ranked 3 above 3.1.
 _pick_newest() {
   awk '
-    function padnums(s,   out, c, num, i, n) {
+    function version(s,   out, c, num, i, n) {
       out=""; num=""; n=length(s)
       for (i=1; i<=n; i++) {
         c = substr(s, i, 1)
-        if (c ~ /^[0-9]$/) { num = num c }
-        else { if (num != "") { out = out sprintf("%06d", num+0); num="" } ; out = out c }
+        if (c ~ /^[0-9]$/) { num = num c; continue }
+        if (num != "") {
+          if (out != "") out = out "."
+          out = out sprintf("%06d", num+0); num=""
+        }
       }
-      if (num != "") out = out sprintf("%06d", num+0)
+      if (num != "") {
+        if (out != "") out = out "."
+        out = out sprintf("%06d", num+0)
+      }
       return out
     }
-    length($0) > 0 { print padnums($0) "\t" $0 }
-  ' | sort | tail -n1 | cut -f2-
+    function effort_rank(s) {
+      if (s ~ /-high$/)   return 3
+      if (s ~ /-medium$/) return 2
+      if (s ~ /-low$/)    return 1
+      return 0
+    }
+    length($0) > 0 { print version($0) "\t" effort_rank($0) "\t" $0 }
+  ' | LC_ALL=C sort | tail -n1 | cut -f3-
 }
 
 # Resolve "family + optional effort" against the live catalogue.
@@ -1786,8 +1804,13 @@ _validate_claude_effort() {
   esac
 }
 
+# Same ceiling as the offload budget: Claude Code kills a foreground tool call
+# at 600s, and a default above that meant the harness killed the run before this
+# timeout could fire and say so. Raise it with --timeout for a background run.
+AGY_SECOND_OPINION_TIMEOUT="${AGY_SECOND_OPINION_TIMEOUT:-540}"
+
 cmd_second_opinion() {
-  local model="opus" effort="high" dir="" tmo=900 raw=0 use_stdin=0 question=""
+  local model="opus" effort="high" dir="" tmo="$AGY_SECOND_OPINION_TIMEOUT" raw=0 use_stdin=0 question=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --model)     if [ $# -ge 2 ]; then model="$2"; shift 2; else shift; fi ;;

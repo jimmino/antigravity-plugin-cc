@@ -31,7 +31,10 @@ printf '%s' "<established facts, what you ruled out and how>" |
 
 - `--model opus` (default) for reasoning, `sonnet` for speed, `haiku` for
   triage. `--effort low|medium|high|xhigh|max` (default `high`).
-- `--timeout <seconds>` (default 900). Set the Bash tool timeout accordingly.
+- `--timeout <seconds>` (default 540, under Claude Code's 600s tool kill). Set
+  the Bash tool timeout to 600000 ms. A longer `--timeout` only helps with
+  `run_in_background: true`; in the foreground the tool call is killed at 600s
+  before the wrapper can report anything.
 - The run is read-only by construction. There is no write mode here: the caller
   of this command is already a Claude that can edit files.
 

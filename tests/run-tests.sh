@@ -56,7 +56,7 @@ JSON
   # silently steers the next one.
   unset FAKE_AGY_RESPONSE FAKE_AGY_EMPTY FAKE_AGY_STATUS FAKE_AGY_IN FAKE_AGY_OUT 2>/dev/null || true
   unset FAKE_AGY_DENIED_COMMAND FAKE_AGY_STDERR FAKE_AGY_FAIL_MODELS FAKE_AGY_ARGV_APPEND 2>/dev/null || true
-  unset FAKE_AGY_CTX_COPY FAKE_CLAUDE_PWD 2>/dev/null || true
+  unset FAKE_AGY_CTX_COPY FAKE_CLAUDE_PWD FAKE_TIMEOUT_LOG 2>/dev/null || true
   unset FAKE_CLAUDE_ARGV FAKE_CLAUDE_STDIN FAKE_CLAUDE_RESULT FAKE_CLAUDE_ERROR 2>/dev/null || true
   unset AGY_FORCE_LEGACY_MODEL AGY_QUIET 2>/dev/null || true
   export AGY_MODELS_CACHE_TTL=3600
@@ -324,6 +324,39 @@ t_future_version_ordering_is_numeric() {
   export FAKE_AGY_CATALOG="$SANDBOX/two.tsv"
   run_wrapper ask --model flash "hi"
   argv_has "gemini-3.10-flash-high" || fail_msg "3.10 must sort above 3.9; argv: $(argv_log | tr '\n' ' ')"
+}
+
+t_future_newest_ignores_locale_collation() {
+  # A UTF-8 collation skips punctuation, so a bare `sort` compared
+  # "gemini3flash" with "gemini31flash" and put 3 above 3.1. Git Bash and
+  # Ubuntu CI run with a codepoint locale, which hid it; force a real one.
+  local loc="" l
+  for l in en_US.UTF-8 en_US.utf8; do
+    if locale -a 2>/dev/null | grep -qx "$l"; then loc="$l"; break; fi
+  done
+  printf 'gemini-3-flash-high\tGemini 3 Flash (High)\ngemini-3.1-flash-high\tGemini 3.1 Flash (High)\n' \
+    > "$SANDBOX/two.tsv"
+  export FAKE_AGY_CATALOG="$SANDBOX/two.tsv"
+  ( if [ -n "$loc" ]; then export LC_ALL="$loc"; fi
+    bash "$WRAPPER" ask --model flash "hi" ) >/dev/null 2>&1
+  argv_has "gemini-3.1-flash-high" || fail_msg "3.1 must beat 3 under ${loc:-the default} locale; argv: $(argv_log | tr '\n' ' ')"
+}
+
+t_future_claude_picks_newest_version_not_name() {
+  # Claude ids put the family before the version; sorting the whole id made
+  # `claude` mean "alphabetically last family", so Sonnet 4.6 beat Opus 5.
+  printf 'claude-sonnet-4-6\tClaude Sonnet 4.6 (Thinking)\nclaude-opus-5-thinking\tClaude Opus 5 (Thinking)\n' \
+    > "$SANDBOX/claude.tsv"
+  export FAKE_AGY_CATALOG="$SANDBOX/claude.tsv"
+  run_wrapper ask --model claude "hi"
+  argv_has "claude-opus-5-thinking" || fail_msg "claude => the newest Claude version; argv: $(argv_log | tr '\n' ' ')"
+}
+
+t_future_gemini_prefers_high_effort_on_a_tie() {
+  # Every newest-version Gemini carries an effort suffix; a lexical tie-break
+  # picked "medium" only because it sorts after "high".
+  run_wrapper ask --model gemini "hi"
+  argv_has "gemini-3.8-flash-high" || fail_msg "gemini => newest version at high effort; argv: $(argv_log | tr '\n' ' ')"
 }
 
 t_future_unknown_model_is_passed_through() {
@@ -1068,6 +1101,36 @@ t_second_opinion_rejects_a_bad_effort() {
   assert_eq 64 "$RC" "an invalid effort is a usage error"
 }
 
+# Stands in for coreutils timeout: records the limit it was given, then runs
+# the command, so a test can see the limit without waiting for it.
+install_fake_timeout() {
+  cat > "$SANDBOX/bin/timeout" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$1" > "$FAKE_TIMEOUT_LOG"
+shift
+exec "$@"
+STUB
+  chmod +x "$SANDBOX/bin/timeout"
+  export FAKE_TIMEOUT_LOG="$SANDBOX/timeout.log"
+}
+
+t_second_opinion_default_timeout_fits_the_tool_limit() {
+  # Claude Code kills a foreground tool call at 600s. A longer default meant the
+  # harness killed the run first: no answer, no clean timeout message.
+  install_fake_claude
+  install_fake_timeout
+  run_wrapper second-opinion --dir "$SANDBOX" "why"
+  assert_eq 0 "$RC" "the second opinion should succeed"
+  assert_eq "540s" "$(cat "$FAKE_TIMEOUT_LOG" 2>/dev/null)" "the default must sit under the 600s tool kill"
+}
+
+t_second_opinion_timeout_can_be_raised() {
+  install_fake_claude
+  install_fake_timeout
+  run_wrapper second-opinion --timeout 900 --dir "$SANDBOX" "why"
+  assert_eq "900s" "$(cat "$FAKE_TIMEOUT_LOG" 2>/dev/null)" "an explicit --timeout still wins"
+}
+
 # ---------------------------------------------------------- regressions ----
 t_json_escaping_round_trips() {
   # A backslash or newline in a path or version string must survive into
@@ -1252,6 +1315,9 @@ it "future: deep follows a new Pro generation"          t_future_pro_follows_new
 it "future: opus follows a new Claude generation"       t_future_opus_follows_new_generation
 it "future: a family absent today resolves later"       t_future_new_family_resolves
 it "future: version ordering is numeric"                t_future_version_ordering_is_numeric
+it "future: newest ignores locale collation"            t_future_newest_ignores_locale_collation
+it "future: claude picks the newest version, not name"  t_future_claude_picks_newest_version_not_name
+it "future: gemini prefers high effort on a tie"        t_future_gemini_prefers_high_effort_on_a_tie
 it "future: unknown models pass through to agy"         t_future_unknown_model_is_passed_through
 it "future: exact id resolves without a warning"        t_exact_id_resolves_without_warning
 it "future: display name maps to id"                    t_exact_display_name_resolves_to_id
@@ -1346,6 +1412,8 @@ it "second-opinion: context goes on stdin"                 t_second_opinion_pass
 it "second-opinion: reports an auth failure"               t_second_opinion_reports_an_auth_failure
 it "second-opinion: exits 127 without claude"              t_second_opinion_without_claude_exits_127
 it "second-opinion: rejects a bad --effort"                t_second_opinion_rejects_a_bad_effort
+it "second-opinion: default timeout fits the tool limit"   t_second_opinion_default_timeout_fits_the_tool_limit
+it "second-opinion: --timeout can raise the limit"         t_second_opinion_timeout_can_be_raised
 
 printf '\n%s\n' "security"
 it "security: cache dir is not world-readable"          t_cache_dir_is_not_world_readable
