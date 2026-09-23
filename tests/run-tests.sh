@@ -58,7 +58,7 @@ JSON
   unset FAKE_AGY_DENIED_COMMAND FAKE_AGY_STDERR FAKE_AGY_FAIL_MODELS FAKE_AGY_ARGV_APPEND 2>/dev/null || true
   unset FAKE_AGY_CTX_COPY FAKE_CLAUDE_PWD FAKE_TIMEOUT_LOG 2>/dev/null || true
   unset FAKE_CLAUDE_ARGV FAKE_CLAUDE_STDIN FAKE_CLAUDE_RESULT FAKE_CLAUDE_ERROR 2>/dev/null || true
-  unset AGY_FORCE_LEGACY_MODEL AGY_QUIET 2>/dev/null || true
+  unset AGY_FORCE_LEGACY_MODEL AGY_QUIET AGY_ALLOW_PREVIEW 2>/dev/null || true
   export AGY_MODELS_CACHE_TTL=3600
 }
 
@@ -366,6 +366,105 @@ t_future_unknown_model_is_passed_through() {
   assert_eq 0 "$RC" "unknown models must not be rejected by the wrapper"
   argv_has "my-private-endpoint-v2" || fail_msg "unknown model must be forwarded verbatim"
   assert_contains "$ERR" "passing it to agy as-is" "pass-through should be noted"
+}
+
+# ------------------------------------- catalogue shape changes (hardening) --
+# Writes a TSV catalogue from "id|label" lines and points fake-agy at it.
+use_catalog() {
+  printf '%s\n' "$@" | tr '|' '\t' > "$SANDBOX/cat.tsv"
+  export FAKE_AGY_CATALOG="$SANDBOX/cat.tsv"
+}
+
+t_effort_suffix_renamed_refuses_to_guess() {
+  # If low/high became lite/max, "newest Flash" alone would give `fast` and
+  # `balanced` the same model. That must be an error, not a silent pick.
+  use_catalog 'gemini-4.0-flash-lite|Gemini 4.0 Flash (Lite)' \
+              'gemini-4.0-flash-max|Gemini 4.0 Flash (Max)'
+  run_wrapper ask --model fast "hi"
+  assert_eq 64 "$RC" "unreadable effort variants are a usage error"
+  assert_contains "$ERR" "will not guess" "error explains the refusal"
+  assert_contains "$ERR" "gemini-4.0-flash-lite" "error lists the candidates"
+  assert_contains "$ERR" "gemini-4.0-flash-max" "error lists every candidate"
+  assert_not_contains "$(argv_log)" "--model" "no prompt may run"
+}
+
+t_effort_single_unsuffixed_model_is_used_with_note() {
+  # One model and no variants: effort has nothing to choose between.
+  use_catalog 'gemini-5-flash|Gemini 5 Flash'
+  run_wrapper ask --model fast "hi"
+  assert_eq 0 "$RC" "a lone model should still resolve"
+  argv_has "gemini-5-flash" || fail_msg "fast => the only Flash; argv: $(argv_log | tr '\n' ' ')"
+  assert_contains "$ERR" "has no effort variants" "the ignored effort is reported"
+}
+
+t_effort_older_generation_is_flagged() {
+  # The new generation renamed its variants; the old one still has `-low`.
+  # Right effort beats newest, but the alias must say it fell behind.
+  use_catalog 'gemini-4.0-flash-lite|Gemini 4.0 Flash (Lite)' \
+              'gemini-4.0-flash-max|Gemini 4.0 Flash (Max)' \
+              'gemini-3.8-flash-low|Gemini 3.8 Flash (Low)' \
+              'gemini-3.8-flash-high|Gemini 3.8 Flash (High)'
+  run_wrapper ask --model fast "hi"
+  assert_eq 0 "$RC" "a real low-effort model still resolves"
+  argv_has "gemini-3.8-flash-low" || fail_msg "fast => newest real low-effort Flash; argv: $(argv_log | tr '\n' ' ')"
+  assert_contains "$ERR" "has no 'low' variant" "falling a generation behind is reported"
+}
+
+t_effort_current_catalogue_is_silent() {
+  run_wrapper ask --model fast "hi"
+  assert_not_contains "$ERR" "[wrapper] note:" "a normal resolution needs no note"
+}
+
+t_preview_is_skipped_by_aliases() {
+  use_catalog 'gemini-4.0-flash-preview-high|Gemini 4.0 Flash Preview (High)' \
+              'gemini-3.8-flash-high|Gemini 3.8 Flash (High)'
+  run_wrapper ask --model flash "hi"
+  argv_has "gemini-3.8-flash-high" || fail_msg "flash must stay on the newest stable Flash; argv: $(argv_log | tr '\n' ' ')"
+}
+
+t_preview_marked_only_in_label_is_skipped() {
+  use_catalog 'gemini-4.0-flash-high|Gemini 4.0 Flash (High, Preview)' \
+              'gemini-3.8-flash-high|Gemini 3.8 Flash (High)'
+  run_wrapper ask --model flash "hi"
+  argv_has "gemini-3.8-flash-high" || fail_msg "a preview flagged only in the label is still a preview; argv: $(argv_log | tr '\n' ' ')"
+}
+
+t_experimental_is_skipped_by_aliases() {
+  use_catalog 'gemini-exp-9999|Gemini Experimental' \
+              'gemini-3.8-flash-high|Gemini 3.8 Flash (High)'
+  run_wrapper ask --model gemini "hi"
+  argv_has "gemini-3.8-flash-high" || fail_msg "gemini must not land on an experimental id; argv: $(argv_log | tr '\n' ' ')"
+}
+
+t_preview_filter_matches_whole_words_only() {
+  # "express" contains "exp" but is not an experiment.
+  use_catalog 'gemini-9-express|Gemini 9 Express'
+  run_wrapper ask --model gemini "hi"
+  argv_has "gemini-9-express" || fail_msg "only whole-word markers count; argv: $(argv_log | tr '\n' ' ')"
+}
+
+t_preview_allowed_by_env() {
+  use_catalog 'gemini-4.0-flash-preview-high|Gemini 4.0 Flash Preview (High)' \
+              'gemini-3.8-flash-high|Gemini 3.8 Flash (High)'
+  export AGY_ALLOW_PREVIEW=1
+  run_wrapper ask --model flash "hi"
+  argv_has "gemini-4.0-flash-preview-high" || fail_msg "AGY_ALLOW_PREVIEW=1 lets aliases pick previews; argv: $(argv_log | tr '\n' ' ')"
+}
+
+t_preview_only_family_errors_with_hint() {
+  use_catalog 'claude-haiku-6-preview|Claude Haiku 6 (Preview)' \
+              'gemini-3.8-flash-high|Gemini 3.8 Flash (High)'
+  run_wrapper ask --model haiku "hi"
+  assert_eq 64 "$RC" "a preview-only family is a usage error"
+  assert_contains "$ERR" "claude-haiku-6-preview" "error names the preview"
+  assert_contains "$ERR" "AGY_ALLOW_PREVIEW=1" "error says how to opt in"
+}
+
+t_preview_exact_id_is_honoured() {
+  use_catalog 'gemini-4.0-flash-preview-high|Gemini 4.0 Flash Preview (High)' \
+              'gemini-3.8-flash-high|Gemini 3.8 Flash (High)'
+  run_wrapper ask --model gemini-4.0-flash-preview-high "hi"
+  argv_has "gemini-4.0-flash-preview-high" || fail_msg "an exact preview id must still work"
 }
 
 t_exact_id_resolves_without_warning() {
@@ -1323,6 +1422,17 @@ it "future: exact id resolves without a warning"        t_exact_id_resolves_with
 it "future: display name maps to id"                    t_exact_display_name_resolves_to_id
 it "future: display name match ignores case"            t_display_name_is_case_insensitive
 it "future: empty --model exits 64"                     t_empty_model_exits_64
+it "shape: renamed effort suffixes refuse to guess"     t_effort_suffix_renamed_refuses_to_guess
+it "shape: a lone unsuffixed model is used, with note"  t_effort_single_unsuffixed_model_is_used_with_note
+it "shape: falling a generation behind is flagged"      t_effort_older_generation_is_flagged
+it "shape: today's catalogue resolves without notes"    t_effort_current_catalogue_is_silent
+it "shape: aliases skip previews"                       t_preview_is_skipped_by_aliases
+it "shape: a preview flagged only in the label"         t_preview_marked_only_in_label_is_skipped
+it "shape: aliases skip experimental ids"               t_experimental_is_skipped_by_aliases
+it "shape: preview markers match whole words only"      t_preview_filter_matches_whole_words_only
+it "shape: AGY_ALLOW_PREVIEW=1 lets aliases pick them"  t_preview_allowed_by_env
+it "shape: a preview-only family errors with a hint"    t_preview_only_family_errors_with_hint
+it "shape: an exact preview id still works"             t_preview_exact_id_is_honoured
 it "future: model table is live, not hardcoded"         t_model_table_is_live_not_hardcoded
 it "future: help shows live models"                     t_help_contains_no_hardcoded_model_versions
 
