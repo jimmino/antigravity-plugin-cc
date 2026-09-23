@@ -8,16 +8,16 @@
 <meta property="og:title" content="agy Antigravity CLI plugin for Claude Code" />
 <meta property="og:description" content="Open-source plugin that lets Claude Code delegate tasks to Google's Antigravity CLI. Use Imagen, deep research, code review and per-call model switching across Gemini, Claude and GPT-OSS without leaving your editor." />
 <meta property="og:type" content="website" />
-<meta property="og:url" content="https://simplybychris.github.io/antigravity-plugin-cc/" />
-<meta property="og:image" content="https://simplybychris.github.io/antigravity-plugin-cc/og-image.png" />
+<meta property="og:url" content="https://jimmino.github.io/antigravity-plugin-cc/" />
+<meta property="og:image" content="https://jimmino.github.io/antigravity-plugin-cc/og-image.png" />
 <meta property="og:image:width" content="1200" />
 <meta property="og:image:height" content="630" />
 <meta property="og:image:alt" content="agy plugin terminal demo, Claude Code with Antigravity CLI" />
 <meta property="og:site_name" content="agy plugin for Claude Code" />
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content="agy Antigravity CLI plugin for Claude Code" />
-<meta name="twitter:description" content="Use Google's Antigravity inside Claude Code. Six slash commands, per-call model switching, MIT." />
-<meta name="twitter:image" content="https://simplybychris.github.io/antigravity-plugin-cc/og-image.png" />
+<meta name="twitter:description" content="Use Google's Antigravity inside Claude Code. Eleven slash commands, read-only bulk reads, a live model catalogue, MIT." />
+<meta name="twitter:image" content="https://jimmino.github.io/antigravity-plugin-cc/og-image.png" />
 <meta name="theme-color" content="#ffffff" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -480,8 +480,9 @@
   <h1>Delegate tasks to Google <span class="grad">Antigravity</span> from inside Claude Code.</h1>
   <p class="lede">
     A small open-source plugin that wraps the <code class="inline">agy</code> CLI.
-    Six slash commands, a forwarding subagent, code review, deep research,
-    and native image generation without leaving your editor.
+    Eleven slash commands, two subagents, read-only bulk reads that keep the
+    tokens out of your context, code review, deep research, and native image
+    generation without leaving your editor.
   </p>
   <div class="hero-cta">
     <a class="btn btn-primary" href="#install">Install in Claude Code</a>
@@ -542,9 +543,10 @@
 <section id="features">
   <div class="container">
     <p class="section-eyebrow">Features</p>
-    <h2 class="section-title">Six commands. <span class="grad">One subagent.</span></h2>
+    <h2 class="section-title">Nine workflows. <span class="grad">Two subagents.</span></h2>
     <p class="section-lede">
       Each tile is one entry point. Talk to Claude naturally or call the slash command directly.
+      <code class="inline">/agy:models</code> and <code class="inline">/agy:help</code> list the live model catalogue and every command.
     </p>
 
     <div class="tiles">
@@ -613,6 +615,10 @@
             <span>Subagents in Claude Code run in the background and notify you when they finish. A natural fit for <code class="inline">--background</code> research, refactors, or CI investigations.</span>
           </li>
           <li>
+            <strong>Follows new models on its own.</strong>
+            <span>Aliases like <code class="inline">fast</code>, <code class="inline">balanced</code> and <code class="inline">deep</code> name a family and an effort, and resolve against the live <code class="inline">agy models</code> catalogue. A new Gemini release needs no plugin update.</span>
+          </li>
+          <li>
             <strong>No runtime baggage.</strong>
             <span>Pure Bash wrapper around the local <code class="inline">agy</code> binary. No Node, no broker, no hidden services.</span>
           </li>
@@ -647,7 +653,7 @@
       <a href="https://github.com/jimmino/antigravity-plugin-cc" target="_blank" rel="noopener">GitHub</a>
       <a href="https://github.com/jimmino/antigravity-plugin-cc/blob/main/CHANGELOG.md" target="_blank" rel="noopener">Changelog</a>
       <a href="https://github.com/jimmino/antigravity-plugin-cc/issues" target="_blank" rel="noopener">Issues</a>
-      <a href="https://detechtive.pl" target="_blank" rel="noopener">detechtive.pl</a>
+      <a href="https://github.com/simplybychris/antigravity-plugin-cc" target="_blank" rel="noopener">Original by simplybychris</a>
     </div>
   </div>
 </footer>
