@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- **The fork owns its metadata.** The marketplace owner and plugin author now
+  name jimmino, and both descriptions credit simplybychris/antigravity-plugin-cc
+  as the original. `LICENSE` keeps the original copyright line and adds one for
+  the fork.
+- **The landing page points at the fork.** Its `og:url` and preview-image URLs
+  move to `jimmino.github.io`, and the footer credits the original repository
+  instead of linking to the original author's site. The command counts ("six
+  commands, one subagent") are corrected, and a bullet covers the live model
+  catalogue.
+
 ## [0.7.0] - 2026-09-22
 
 ### Changed
