@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instead of linking to the original author's site. The command counts ("six
   commands, one subagent") are corrected, and a bullet covers the live model
   catalogue.
+- **New social preview image.** `docs/og-image.png` was the original author's
+  screenshot and showed seven commands. The new one lists all eleven and
+  leads with the offload trade (211k tokens read by agy, about 900 back in
+  Claude Code). It is rendered from `tools/og-image.html`, whose header has
+  the command to regenerate it.
 
 ## [0.7.0] - 2026-09-22
 

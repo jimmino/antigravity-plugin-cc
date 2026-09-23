@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<!--
+  Source for docs/og-image.png (1200x630). Regenerate after the command list
+  changes, from the repo root:
+
+    "/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe" \
+      --headless=new --disable-gpu --hide-scrollbars \
+      --force-device-scale-factor=1 --window-size=1200,630 \
+      --virtual-time-budget=8000 \
+      --screenshot="$(cygpath -w "$PWD/docs/og-image.png")" \
+      "file:///$(cygpath -m "$PWD/tools/og-image.html")"
+
+  Chrome takes the same flags. Keep model names out of it: they go stale.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>agy og-image</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=block" rel="stylesheet" />
+<style>
+  :root {
+    --ink: rgb(18, 19, 23);
+    --ink-soft: rgb(75, 78, 89);
+    --ink-mute: rgb(120, 125, 138);
+    --line: rgba(33, 34, 38, 0.08);
+    --g1: #4285F4;
+    --g2: #A348C7;
+    --g3: #FF6F3C;
+    --grad: linear-gradient(135deg, var(--g1) 0%, var(--g2) 50%, var(--g3) 100%);
+    --term-bg: #15161b;
+    --term-line: rgba(255, 255, 255, 0.07);
+    --term-ink: #e6e7eb;
+    --term-mute: #8b8f9c;
+    --font-sans: "Inter", "Segoe UI", sans-serif;
+    --font-mono: "JetBrains Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 1200px; height: 630px; overflow: hidden; }
+  body {
+    position: relative;
+    background: #fff;
+    color: var(--ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  body::before {
+    content: "";
+    position: absolute; inset: 0;
+    background-image: radial-gradient(circle, rgba(33, 34, 38, 0.07) 1px, transparent 1.4px);
+    background-size: 28px 28px;
+    -webkit-mask-image: radial-gradient(ellipse 90% 90% at 20% 20%, black 30%, transparent 80%);
+  }
+  body::after {
+    content: "";
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(520px 360px at 8% 0%, rgba(66, 133, 244, 0.16), transparent 70%),
+      radial-gradient(480px 360px at 55% 110%, rgba(163, 72, 199, 0.14), transparent 70%),
+      radial-gradient(420px 320px at 100% 30%, rgba(255, 111, 60, 0.12), transparent 70%);
+  }
+  .wrap {
+    position: relative; z-index: 1;
+    display: grid;
+    grid-template-columns: 468px 1fr;
+    gap: 44px;
+    height: 100%;
+    padding: 56px 56px 56px 64px;
+    align-items: center;
+  }
+
+  .brand {
+    display: inline-flex; align-items: center; gap: 10px;
+    font-size: 17px; color: var(--ink-soft); font-weight: 500;
+  }
+  .brand b {
+    font-family: var(--font-mono); font-weight: 500; color: var(--ink);
+    padding: 3px 9px; border-radius: 8px;
+    background: rgba(183, 191, 217, 0.22);
+  }
+  h1 {
+    margin: 26px 0 0;
+    font-size: 58px; line-height: 1.04; letter-spacing: -0.035em; font-weight: 600;
+  }
+  .grad {
+    background: var(--grad);
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .lede {
+    margin: 22px 0 0;
+    font-size: 21px; line-height: 1.42; color: var(--ink-soft);
+  }
+  .stat {
+    margin-top: 30px;
+    display: flex; gap: 14px; align-items: stretch;
+  }
+  .stat .num {
+    flex: 1;
+    padding: 14px 16px; border-radius: 16px;
+    background: rgba(255, 255, 255, 0.72);
+    border: 1px solid var(--line);
+  }
+  .stat .v { font-size: 27px; font-weight: 600; letter-spacing: -0.02em; }
+  .stat .k { margin-top: 2px; font-size: 14px; color: var(--ink-mute); }
+  .foot {
+    margin-top: 26px;
+    font-size: 15px; color: var(--ink-mute);
+  }
+  .foot span + span::before { content: "·"; margin: 0 9px; }
+
+  .term {
+    position: relative;
+    background: var(--term-bg);
+    border-radius: 18px;
+    box-shadow: 0 30px 70px -20px rgba(24, 26, 40, 0.45), 0 0 0 1px rgba(0, 0, 0, 0.06);
+    overflow: hidden;
+    font-family: var(--font-mono);
+    color: var(--term-ink);
+  }
+  .term::before {
+    content: "";
+    position: absolute; left: 0; right: 0; top: 0; height: 3px;
+    background: var(--grad);
+  }
+  .bar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 15px 18px 13px;
+    border-bottom: 1px solid var(--term-line);
+  }
+  .dot { width: 12px; height: 12px; border-radius: 50%; }
+  .bar .t { margin-left: 12px; font-size: 13px; color: var(--term-mute); }
+  .body { padding: 18px 20px 20px; }
+  .prompt {
+    font-size: 17px; padding: 10px 14px;
+    border: 1px solid var(--term-line); border-radius: 10px;
+  }
+  .prompt .c { color: var(--term-mute); margin-right: 10px; }
+  .caret {
+    display: inline-block; width: 9px; height: 19px; margin-left: 2px;
+    vertical-align: -3px; background: var(--term-ink);
+  }
+  ul { list-style: none; margin: 12px 0 0; padding: 0; }
+  li {
+    display: grid; grid-template-columns: 206px 1fr;
+    padding: 5px 14px; border-radius: 8px;
+    font-size: 14.5px; line-height: 1.5;
+  }
+  li .cmd { color: #b9c6ff; }
+  li .d { color: var(--term-mute); font-family: var(--font-sans); font-size: 14.5px; }
+  li.sel { background: linear-gradient(90deg, rgba(66,133,244,0.22), rgba(163,72,199,0.16) 60%, rgba(255,111,60,0.06)); }
+  li.sel .cmd { color: #fff; }
+  li.sel .d { color: #d4d6dd; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div>
+    <div class="brand"><b>agy</b> plugin for Claude Code</div>
+    <h1>Put <span class="grad">Antigravity</span> to work inside Claude&nbsp;Code.</h1>
+    <p class="lede">Offload the bulk reading to Gemini. A short, cited answer comes back and your context stays for the real work.</p>
+    <div class="stat">
+      <div class="num"><div class="v">211k</div><div class="k">tokens read by agy</div></div>
+      <div class="num"><div class="v">~900</div><div class="k">tokens back in Claude Code</div></div>
+    </div>
+    <div class="foot"><span>11 commands</span><span>read-only offload</span><span>live model catalogue</span><span>MIT</span></div>
+  </div>
+
+  <div class="term">
+    <div class="bar">
+      <span class="dot" style="background:#ff5f57"></span>
+      <span class="dot" style="background:#febc2e"></span>
+      <span class="dot" style="background:#28c840"></span>
+      <span class="t">claude — ~/projects/app</span>
+    </div>
+    <div class="body">
+      <div class="prompt"><span class="c">&gt;</span>/agy<span class="caret"></span></div>
+      <ul>
+        <li class="sel"><span class="cmd">/agy:offload</span><span class="d">Read-only bulk read, cited answer</span></li>
+        <li><span class="cmd">/agy:fanout</span><span class="d">Several offload jobs in parallel</span></li>
+        <li><span class="cmd">/agy:review</span><span class="d">Independent review of your git diff</span></li>
+        <li><span class="cmd">/agy:second-opinion</span><span class="d">Fresh read-only Claude, plan mode</span></li>
+        <li><span class="cmd">/agy:delegate</span><span class="d">Hand a task to the agy:runner subagent</span></li>
+        <li><span class="cmd">/agy:research</span><span class="d">Structured deep-research brief</span></li>
+        <li><span class="cmd">/agy:ask</span><span class="d">One-shot prompt through agy -p</span></li>
+        <li><span class="cmd">/agy:image</span><span class="d">Generate an image with Imagen</span></li>
+        <li><span class="cmd">/agy:models</span><span class="d">Live model catalogue and aliases</span></li>
+        <li><span class="cmd">/agy:setup</span><span class="d">Check agy is installed and signed in</span></li>
+        <li><span class="cmd">/agy:help</span><span class="d">Every command and alias</span></li>
+      </ul>
+    </div>
+  </div>
+</div>
+</body>
+</html>
