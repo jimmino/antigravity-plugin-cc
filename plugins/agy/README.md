@@ -6,8 +6,8 @@ full usage, see the [repo-level README](../../README.md).
 ## Layout
 
 - `commands/` — slash commands: `/agy:setup`, `/agy:models`, `/agy:ask`,
-  `/agy:offload`, `/agy:fanout`, `/agy:second-opinion`, `/agy:delegate`,
-  `/agy:research`, `/agy:review`, `/agy:image`, `/agy:help`.
+  `/agy:offload`, `/agy:fanout`, `/agy:second-opinion`, `/agy:bridge`,
+  `/agy:delegate`, `/agy:research`, `/agy:review`, `/agy:image`, `/agy:help`.
 - `agents/runner.md` — the `agy:runner` subagent (thin forwarder around the
   Antigravity CLI).
 - `agents/offload.md` — the `agy:offload` subagent (read-only bulk read, returns
@@ -19,7 +19,12 @@ full usage, see the [repo-level README](../../README.md).
 - `scripts/agy-run.sh` — bash wrapper that locates `agy`, checks auth,
   resolves model aliases against the live catalogue, and runs `agy`. Its
   subcommands are `check`, `models`, `ask`, `offload`, `fanout`, `review`,
-  `second-opinion`, `image` and `help`.
+  `second-opinion`, `ask-claude`, `bridge`, `image` and `help`.
+- `scripts/bridge/` — what `/agy:bridge install` copies into `agy`'s
+  customization folder: the `ask-claude` launcher that `agy` calls, its
+  PowerShell front end for Windows, and the `SKILL.md` template that tells
+  `agy` how to call it. The launcher runs `agy-run.sh ask-claude` from the
+  installed plugin version, so its own path never changes.
 
 Tests for the wrapper live in [`tests/`](../../tests) at the repo root:
 
@@ -51,6 +56,12 @@ as a workspace file rather than on the command line, and parse
 `--output-format json` for telemetry and for the detection that tells a real
 answer from the narration of a turn cut short. On a build with no `--mode`
 flag they refuse to run rather than silently drop the read-only guarantee.
+
+`second-opinion` and `ask-claude` do not run `agy` at all: they start a
+headless Claude Code through one shared runner, which loads only the user's
+settings and no MCP servers. `ask-claude` is the side `agy` calls. It stays
+read-only unless `--allow-write`, and a write run fails closed on a Claude
+Code build without `--restricted`.
 
 ## Why this layout
 

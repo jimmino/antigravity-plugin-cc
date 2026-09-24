@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+# ask-claude: the fixed path the Antigravity CLI (agy) calls to hand a task to
+# Claude Code. Written by agy-run.sh bridge install, removed by bridge
+# uninstall. Do not edit it: the next install overwrites it.
+#
+# The agy plugin for Claude Code keeps its scripts in a folder named after the
+# plugin version, so their path changes with every release. This file stays
+# where it is and runs `agy-run.sh ask-claude` from the version that Claude
+# Code has installed now. A plugin upgrade does not change what agy calls.
+#
+# Lookup order: $AGY_RUN_SH, then Claude Code's installed_plugins.json, then
+# the newest agy version in Claude Code's plugin cache.
+set -euo pipefail
+
+# ask-claude.ps1 sends the arguments base64-encoded in AGY_BRIDGE_ARGV, not on
+# the command line. Git Bash reads a Windows command line with its own quoting
+# rules and changes any double quote inside an argument. Each argument is
+# NUL-terminated UTF-8.
+if [ -n "${AGY_BRIDGE_ARGV:-}" ]; then
+  encoded="$AGY_BRIDGE_ARGV"
+  unset AGY_BRIDGE_ARGV
+  decoded=()
+  while IFS= read -r -d '' arg; do decoded+=("$arg"); done \
+    < <(printf '%s' "$encoded" | base64 -d)
+  set -- ${decoded[@]+"${decoded[@]}"}
+fi
+
+plugins="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins"
+
+# An agy plugin from before the bridge existed has an agy-run.sh too, but
+# without the ask-claude subcommand.
+knows_ask_claude() { [ -f "$1" ] && grep -q 'cmd_ask_claude' "$1" 2>/dev/null; }
+
+posix_path() {
+  if command -v cygpath >/dev/null 2>&1; then cygpath -u "$1"; else printf '%s' "$1"; fi
+}
+
+# Install paths of every agy plugin Claude Code has installed, user scope first:
+# a project-scope install belongs to one repository.
+from_registry() {
+  local registry="$plugins/installed_plugins.json"
+  [ -f "$registry" ] || return 0
+  command -v python3 >/dev/null 2>&1 || return 0
+  python3 - "$registry" <<'PY' 2>/dev/null || true
+import json, sys
+sys.stdout.reconfigure(newline="\n")
+try:
+    with open(sys.argv[1], encoding="utf-8") as fh:
+        plugins = json.load(fh).get("plugins", {})
+except Exception:
+    sys.exit(0)
+rows = []
+for key, entries in plugins.items() if isinstance(plugins, dict) else []:
+    if not key.startswith("agy@"):
+        continue
+    for entry in entries if isinstance(entries, list) else [entries]:
+        if isinstance(entry, dict) and isinstance(entry.get("installPath"), str):
+            rows.append((0 if entry.get("scope") == "user" else 1, entry["installPath"]))
+for _, path in sorted(rows):
+    print(path)
+PY
+}
+
+# Every cached agy version, newest first. The sort key pads each number in the
+# version, so 0.10.0 sorts above 0.9.0 without GNU sort -V.
+from_cache() {
+  local dir
+  for dir in "$plugins"/cache/*/agy/*/; do
+    if [ -d "$dir" ]; then printf '%s\n' "${dir%/}"; fi
+  done | awk -F/ '{
+      key = ""; n = split($NF, part, /[^0-9]+/)
+      for (i = 1; i <= n; i++) if (part[i] != "") key = key sprintf("%09d.", part[i])
+      print key "\t" $0
+    }' | LC_ALL=C sort -r | cut -f2-
+}
+
+# Prints the agy-run.sh to run. Returns 2 when Claude Code has the plugin
+# installed but no installed version knows ask-claude, 1 when nothing is found.
+find_wrapper() {
+  local path registered=0
+  if [ -n "${AGY_RUN_SH:-}" ]; then
+    printf '%s' "$AGY_RUN_SH"
+    return 0
+  fi
+  while IFS= read -r path; do
+    [ -n "$path" ] || continue
+    registered=1
+    path="$(posix_path "$path")/scripts/agy-run.sh"
+    if knows_ask_claude "$path"; then printf '%s' "$path"; return 0; fi
+  done < <(from_registry)
+  # Never fall back to the cache behind the registry's back: the cache keeps
+  # versions Claude Code has already replaced.
+  if [ "$registered" = "1" ]; then return 2; fi
+  while IFS= read -r path; do
+    path="$path/scripts/agy-run.sh"
+    if knows_ask_claude "$path"; then printf '%s' "$path"; return 0; fi
+  done < <(from_cache)
+  return 1
+}
+
+rc=0
+wrapper="$(find_wrapper)" || rc=$?
+case "$rc" in
+  0)
+    if [ ! -f "$wrapper" ]; then
+      echo "ask-claude: AGY_RUN_SH points at a missing file: $wrapper" >&2
+      exit 127
+    fi
+    exec "${BASH:-bash}" "$wrapper" ask-claude "$@" ;;
+  2)
+    echo "ask-claude: the agy plugin that Claude Code has installed is older than this bridge." >&2
+    echo "            Update the plugin in Claude Code (/plugin), then try again." >&2
+    exit 127 ;;
+  *)
+    echo "ask-claude: cannot find the agy plugin for Claude Code under $plugins." >&2
+    echo "            Install it, or set AGY_RUN_SH to the path of its scripts/agy-run.sh." >&2
+    exit 127 ;;
+esac

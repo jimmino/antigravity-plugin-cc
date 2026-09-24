@@ -1,0 +1,45 @@
+---
+name: ask-claude
+description: >-
+  Hands one task to Claude Code, Anthropic's coding agent, and returns its
+  answer. Use it for deep reasoning, the root cause of a subtle bug, a design
+  judgement, a second opinion, or, with --allow-write, a precise code change
+  that must be right the first time. Do not use it for bulk reading, searching
+  or summarising; do that yourself.
+---
+
+<!-- Written by agy-run.sh bridge install (the agy plugin for Claude Code). Do not edit: the next install overwrites it. -->
+
+# Ask Claude Code
+
+Run exactly one command. Do not add pipes, redirects, `;` or `&&`: the
+permission rule then stops matching, and a headless run denies the call.
+
+To ask a question (Claude reads and searches, and changes nothing):
+
+    @ASK_CLAUDE@ --read-only --dir <absolute project folder> '<the task>'
+
+To have Claude change files:
+
+    @ASK_CLAUDE@ --allow-write --dir <absolute project folder> '<the task>'
+
+## Rules
+
+- Put `--read-only` or `--allow-write` first, then the other flags, then the
+  task as one argument in single quotes. Inside the quotes, write a single
+  quote as two single quotes in PowerShell, and as `'\''` in sh. Avoid double
+  quotes in the task: Windows PowerShell 5.1 drops them on the way.
+- Use `--allow-write` only when the user asked for a change. Claude then edits
+  files under `--dir` but cannot run commands, so run the build and the tests
+  yourself afterwards and check `git diff`.
+- `--model opus` (the default) for reasoning, `sonnet` for speed, `haiku` for
+  cheap triage. `--effort low|medium|high|xhigh|max`; the default is `high`.
+- Claude starts with no memory of this conversation. Put everything it needs
+  into the task. Name the files it should read; do not paste their contents.
+  Ask for a bounded answer, for example "at most 15 lines" or "a list of
+  path:line".
+- The answer arrives on stdout. One line on stderr gives the model, the time
+  and the cost. Relay the answer as it is, and open the path:line references
+  it cites before you act on them.
+- An error about credentials or OAuth means the user has to run `claude` once
+  in a terminal to sign in again. Report that and stop.

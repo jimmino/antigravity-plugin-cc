@@ -57,8 +57,12 @@ JSON
   unset FAKE_AGY_RESPONSE FAKE_AGY_EMPTY FAKE_AGY_STATUS FAKE_AGY_IN FAKE_AGY_OUT 2>/dev/null || true
   unset FAKE_AGY_DENIED_COMMAND FAKE_AGY_STDERR FAKE_AGY_FAIL_MODELS FAKE_AGY_ARGV_APPEND 2>/dev/null || true
   unset FAKE_AGY_CTX_COPY FAKE_CLAUDE_PWD FAKE_TIMEOUT_LOG 2>/dev/null || true
-  unset FAKE_CLAUDE_ARGV FAKE_CLAUDE_STDIN FAKE_CLAUDE_RESULT FAKE_CLAUDE_ERROR 2>/dev/null || true
+  unset FAKE_CLAUDE_ARGV FAKE_CLAUDE_STDIN FAKE_CLAUDE_RESULT FAKE_CLAUDE_ERROR FAKE_CLAUDE_HELP 2>/dev/null || true
   unset AGY_FORCE_LEGACY_MODEL AGY_QUIET AGY_ALLOW_PREVIEW 2>/dev/null || true
+  # The bridge installs into HOME and finds the plugin through
+  # CLAUDE_CONFIG_DIR, so neither may point at the developer's real ones.
+  unset AGY_BRIDGE_DIR AGY_BRIDGE_WINDOWS AGY_BRIDGE_ARGV AGY_RUN_SH CLAUDE_CONFIG_DIR 2>/dev/null || true
+  unset AGY_ASK_CLAUDE_TIMEOUT AGY_SECOND_OPINION_TIMEOUT 2>/dev/null || true
   # Set when the suite runs from a Claude Code hook or tool call. The wrapper
   # prefers it to $PWD, which would point review and offload at the real repo.
   unset CLAUDE_PROJECT_DIR 2>/dev/null || true
@@ -1396,6 +1400,308 @@ t_second_opinion_timeout_can_be_raised() {
   assert_eq "900s" "$(cat "$FAKE_TIMEOUT_LOG" 2>/dev/null)" "an explicit --timeout still wins"
 }
 
+# ---------------------------------------------------------- ask-claude ----
+claude_ran() { [ -s "${FAKE_CLAUDE_ARGV:-}" ]; }
+
+t_ask_claude_is_read_only_by_default() {
+  install_fake_claude
+  export FAKE_CLAUDE_RESULT="the answer"
+  run_wrapper ask-claude --dir "$SANDBOX" "why does it deadlock"
+  assert_eq 0 "$RC" "ask-claude should succeed"
+  assert_contains "$OUT" "the answer" "the answer comes back"
+  assert_eq "Read,Grep,Glob" "$(claude_argv_after --tools)" "read-only tools only"
+  assert_eq "plan" "$(claude_argv_after --permission-mode)" "plan mode"
+  assert_eq "none" "$(claude_argv_after --permission-prompts)" "nobody can approve anything"
+  assert_eq "opus" "$(claude_argv_after --model)" "opus by default"
+  if claude_argv_has "--restricted"; then fail_msg "a read-only run keeps the user's settings"; fi
+  assert_contains "$(cat "$FAKE_CLAUDE_STDIN")" "Antigravity CLI" "the guard names the caller"
+  assert_contains "$(cat "$FAKE_CLAUDE_STDIN")" "You are read-only" "the guard says it is read-only"
+  assert_contains "$ERR" "ask-claude | opus/high (read-only)" "telemetry names the mode"
+}
+
+t_ask_claude_ignores_project_settings() {
+  # Same hole as second-opinion: claude -p trusts the folder without asking.
+  install_fake_claude
+  mkdir -p "$SANDBOX/proj"
+  local mode
+  for mode in --read-only --allow-write; do
+    run_wrapper ask-claude "$mode" --dir "$SANDBOX/proj" "q"
+    assert_eq 0 "$RC" "ask-claude $mode should succeed"
+    assert_eq "user" "$(claude_argv_after --setting-sources)" "$mode: only the user's own settings may load"
+    claude_argv_has "--strict-mcp-config" || fail_msg "$mode: MCP servers must be left out"
+  done
+}
+
+t_ask_claude_allow_write_edits_but_never_runs_commands() {
+  install_fake_claude
+  mkdir -p "$SANDBOX/proj"
+  run_wrapper ask-claude --allow-write --dir "$SANDBOX/proj" "rename foo to bar"
+  assert_eq 0 "$RC" "a write run should succeed"
+  assert_eq "Read,Grep,Glob,Edit,Write" "$(claude_argv_after --tools)" "file tools, and no Bash"
+  assert_eq "acceptEdits" "$(claude_argv_after --permission-mode)" "edits are accepted"
+  assert_eq "none" "$(claude_argv_after --permission-prompts)" "and nothing else can be approved"
+  claude_argv_has "--restricted" || fail_msg "a write run must be restricted"
+  claude_argv_has "Edit(**/.agents/**)" || fail_msg "agy's hooks and skills are off limits"
+  claude_argv_has "Edit(**/.git/**)" || fail_msg "git's hooks and config are off limits"
+  claude_argv_has "Edit(**/.claude/**)" || fail_msg "Claude Code's settings are off limits"
+  assert_contains "$(cat "$FAKE_CLAUDE_STDIN")" "list every file you changed" "the guard asks for a change list"
+  assert_contains "$ERR" "ask-claude | opus/high (write)" "telemetry names the mode"
+  assert_contains "$ERR" "not in a git work tree" "a folder git cannot undo is flagged"
+}
+
+t_ask_claude_write_needs_an_explicit_dir() {
+  install_fake_claude
+  run_wrapper ask-claude --allow-write "fix it"
+  assert_eq 64 "$RC" "no --dir is a usage error"
+  assert_contains "$ERR" "needs --dir" "and says so"
+  if claude_ran; then fail_msg "claude must not start"; fi
+}
+
+t_ask_claude_write_refuses_a_home_folder() {
+  install_fake_claude
+  run_wrapper ask-claude --allow-write --dir "$HOME" "fix it"
+  assert_eq 64 "$RC" "a home folder is too broad to write in"
+  if claude_ran; then fail_msg "claude must not start"; fi
+}
+
+t_ask_claude_write_fails_closed_without_restricted() {
+  install_fake_claude
+  export FAKE_CLAUDE_HELP=old
+  mkdir -p "$SANDBOX/proj"
+  run_wrapper ask-claude --allow-write --dir "$SANDBOX/proj" "fix it"
+  assert_eq 1 "$RC" "a build without --restricted cannot write"
+  assert_contains "$ERR" "--restricted" "and says why"
+  if claude_ran; then fail_msg "claude must not start"; fi
+}
+
+t_ask_claude_modes_contradict() {
+  install_fake_claude
+  mkdir -p "$SANDBOX/proj"
+  run_wrapper ask-claude --read-only --allow-write --dir "$SANDBOX/proj" "fix it"
+  assert_eq 64 "$RC" "--read-only with --allow-write is a usage error"
+  if claude_ran; then fail_msg "claude must not start"; fi
+}
+
+t_ask_claude_rejects_a_flag_after_the_task() {
+  # agy's permission rule matches the start of the command, so a flag after
+  # the task must not be quietly dropped into it.
+  install_fake_claude
+  run_wrapper ask-claude --read-only --dir "$SANDBOX" "fix it" --allow-write
+  assert_eq 64 "$RC" "a flag after the task is a usage error"
+  assert_contains "$ERR" "comes after the task" "and says so"
+  if claude_ran; then fail_msg "claude must not start"; fi
+}
+
+t_ask_claude_rejects_an_unknown_flag() {
+  install_fake_claude
+  run_wrapper ask-claude --alow-write --dir "$SANDBOX" "fix it"
+  assert_eq 64 "$RC" "a misspelt flag is a usage error, not part of the task"
+  if claude_ran; then fail_msg "claude must not start"; fi
+}
+
+t_ask_claude_joins_an_unquoted_task() {
+  install_fake_claude
+  run_wrapper ask-claude --dir "$SANDBOX" why does it fail
+  assert_eq 0 "$RC" "an unquoted task should still run"
+  assert_contains "$(cat "$FAKE_CLAUDE_STDIN")" "why does it fail" "the words become one task"
+}
+
+t_ask_claude_passes_context_on_stdin() {
+  install_fake_claude
+  run_wrapper_stdin "ESTABLISHED-FACT" ask-claude --stdin --dir "$SANDBOX" "why"
+  assert_eq 0 "$RC" "ask-claude with context should succeed"
+  assert_contains "$(cat "$FAKE_CLAUDE_STDIN")" "ESTABLISHED-FACT" "context must reach claude on stdin"
+}
+
+t_ask_claude_default_timeout() {
+  install_fake_claude
+  install_fake_timeout
+  run_wrapper ask-claude --dir "$SANDBOX" "why"
+  assert_eq 0 "$RC" "ask-claude should succeed"
+  assert_eq "900s" "$(cat "$FAKE_TIMEOUT_LOG" 2>/dev/null)" "agy is the caller, so the 600s tool kill does not apply"
+}
+
+# -------------------------------------------------------------- bridge ----
+bridge_dir() { printf '%s' "$HOME/.gemini/config/skills/ask-claude"; }
+
+# Records $1 as the agy plugin Claude Code has installed, the way
+# installed_plugins.json does.
+register_agy_plugin() {
+  mkdir -p "$HOME/.claude/plugins"
+  python3 - "$HOME/.claude/plugins/installed_plugins.json" "$1" <<'PY'
+import json, sys
+entry = {"scope": "user", "installPath": sys.argv[2], "version": "test"}
+with open(sys.argv[1], "w", encoding="utf-8") as fh:
+    json.dump({"version": 2, "plugins": {"agy@antigravity-cc": [entry]}}, fh)
+PY
+}
+
+# A copy of the wrapper in Claude Code's plugin cache as version $1; prints
+# the plugin root. With a second argument, a wrapper from before the bridge.
+cache_agy_version() {
+  local root="$HOME/.claude/plugins/cache/antigravity-cc/agy/$1"
+  mkdir -p "$root/scripts"
+  if [ -n "${2:-}" ]; then
+    printf '#!/usr/bin/env bash\necho "old wrapper: $*"\n' > "$root/scripts/agy-run.sh"
+  else
+    cp "$WRAPPER" "$root/scripts/agy-run.sh"
+  fi
+  printf '%s' "$root"
+}
+
+run_launcher() {
+  local outf errf
+  outf="$(mktemp)"; errf="$(mktemp)"
+  RC=0
+  bash "$(bridge_dir)/scripts/ask-claude" "$@" >"$outf" 2>"$errf" </dev/null || RC=$?
+  OUT="$(cat "$outf")"; ERR="$(cat "$errf")"
+  rm -f "$outf" "$errf"
+}
+
+t_bridge_install_writes_launcher_and_skill() {
+  export AGY_BRIDGE_WINDOWS=0
+  register_agy_plugin "$REPO_ROOT/plugins/agy"
+  run_wrapper bridge install
+  assert_eq 0 "$RC" "install should succeed"
+  [ -x "$(bridge_dir)/scripts/ask-claude" ] || fail_msg "the launcher must be executable"
+  if [ -f "$(bridge_dir)/scripts/ask-claude.ps1" ]; then fail_msg "no PowerShell launcher off Windows"; fi
+  assert_contains "$(cat "$(bridge_dir)/SKILL.md")" "$(bridge_dir)/scripts/ask-claude --read-only" \
+    "the skill tells agy the exact command"
+  assert_not_contains "$(cat "$(bridge_dir)/SKILL.md")" "@ASK_CLAUDE@" "no placeholder is left"
+  assert_contains "$OUT" "The launcher runs: $WRAPPER" "install proves the launcher reaches the plugin"
+  assert_contains "$OUT" "\"command($(bridge_dir)/scripts/ask-claude --read-only)\"" "it prints the read-only rule"
+}
+
+t_bridge_launcher_runs_the_installed_plugin() {
+  export AGY_BRIDGE_WINDOWS=0
+  install_fake_claude
+  register_agy_plugin "$REPO_ROOT/plugins/agy"
+  run_wrapper bridge install
+  run_launcher --read-only --dir "$SANDBOX" "why"
+  assert_eq 0 "$RC" "agy's call through the launcher should succeed"
+  assert_eq "plan" "$(claude_argv_after --permission-mode)" "and reach a read-only Claude Code"
+}
+
+t_bridge_launcher_follows_the_registry() {
+  # The cache keeps versions Claude Code has already replaced; the registry
+  # says which one is live.
+  export AGY_BRIDGE_WINDOWS=0
+  local live
+  live="$(cache_agy_version 0.8.0)"
+  cache_agy_version 0.9.0 >/dev/null
+  register_agy_plugin "$live"
+  run_wrapper bridge install
+  run_launcher --where
+  assert_eq 0 "$RC" "the launcher should find the plugin"
+  assert_contains "$OUT" "/agy/0.8.0/scripts/agy-run.sh" "the registered version wins"
+}
+
+t_bridge_launcher_falls_back_to_the_newest_cached_version() {
+  export AGY_BRIDGE_WINDOWS=0
+  cache_agy_version 0.9.0 >/dev/null
+  cache_agy_version 0.10.0 >/dev/null
+  cache_agy_version 0.11.0 old >/dev/null
+  run_wrapper bridge install
+  run_launcher --where
+  assert_eq 0 "$RC" "the launcher should find the plugin"
+  assert_contains "$OUT" "/agy/0.10.0/scripts/agy-run.sh" "newest by number that knows ask-claude"
+}
+
+t_bridge_launcher_refuses_a_plugin_older_than_the_bridge() {
+  export AGY_BRIDGE_WINDOWS=0
+  cache_agy_version 0.10.0 >/dev/null
+  register_agy_plugin "$(cache_agy_version 0.7.0 old)"
+  run_wrapper bridge install
+  run_launcher --read-only --dir "$SANDBOX" "why"
+  assert_eq 127 "$RC" "an installed plugin without ask-claude is an error"
+  assert_contains "$ERR" "older than this bridge" "that says to update"
+  assert_not_contains "$OUT" "old wrapper" "the old wrapper must not run"
+}
+
+t_bridge_launcher_decodes_windows_arguments() {
+  # ask-claude.ps1 cannot put the arguments on bash's command line intact, so
+  # it sends them base64-encoded, each NUL-terminated.
+  printf 'eA==' | base64 -d >/dev/null 2>&1 || return 0
+  export AGY_BRIDGE_WINDOWS=0
+  register_agy_plugin "$REPO_ROOT/plugins/agy"
+  run_wrapper bridge install
+  cat > "$SANDBOX/argv-dump" <<'STUB'
+#!/usr/bin/env bash
+for a in "$@"; do printf '<%s>\n' "$a"; done
+STUB
+  export AGY_RUN_SH="$SANDBOX/argv-dump"
+  AGY_BRIDGE_ARGV="$(printf -- '--dir\0C:\\x y\0fix the "retry" loop\nand *.ts\0' | base64 | tr -d '\n')"
+  export AGY_BRIDGE_ARGV
+  run_launcher ignored-command-line-args
+  assert_eq 0 "$RC" "the launcher should run"
+  assert_eq "$(printf '<ask-claude>\n<--dir>\n<C:\\x y>\n<fix the "retry" loop\nand *.ts>')" "$OUT" \
+    "every argument arrives exactly as agy wrote it"
+}
+
+t_bridge_install_on_windows_adds_the_powershell_launcher() {
+  export AGY_BRIDGE_WINDOWS=1
+  register_agy_plugin "$REPO_ROOT/plugins/agy"
+  run_wrapper bridge install
+  assert_eq 0 "$RC" "install should succeed"
+  [ -f "$(bridge_dir)/scripts/ask-claude.ps1" ] || fail_msg "Windows needs the PowerShell launcher"
+  assert_contains "$(cat "$(bridge_dir)/SKILL.md")" "pwsh -NoProfile -File " "agy starts it through pwsh"
+  assert_contains "$OUT" "\"command(pwsh -NoProfile -File " "and the rule names that command"
+}
+
+t_bridge_install_keeps_a_file_it_did_not_write() {
+  export AGY_BRIDGE_WINDOWS=0
+  mkdir -p "$(bridge_dir)"
+  echo "my own skill" > "$(bridge_dir)/SKILL.md"
+  run_wrapper bridge install
+  assert_eq 1 "$RC" "install must not overwrite a foreign file"
+  assert_eq "my own skill" "$(cat "$(bridge_dir)/SKILL.md")" "the file is untouched"
+  run_wrapper bridge install --force
+  assert_eq 0 "$RC" "--force overwrites it"
+  assert_contains "$(cat "$(bridge_dir)/SKILL.md")" "Written by agy-run.sh bridge install" "with the bridge's skill"
+}
+
+t_bridge_uninstall_removes_only_its_own_files() {
+  export AGY_BRIDGE_WINDOWS=0
+  run_wrapper bridge install
+  echo "notes" > "$(bridge_dir)/notes.md"
+  run_wrapper bridge uninstall
+  assert_eq 0 "$RC" "uninstall should succeed"
+  if [ -e "$(bridge_dir)/scripts/ask-claude" ]; then fail_msg "the launcher must be gone"; fi
+  if [ -e "$(bridge_dir)/SKILL.md" ]; then fail_msg "the skill must be gone"; fi
+  [ -f "$(bridge_dir)/notes.md" ] || fail_msg "a file the installer did not write stays"
+  assert_contains "$OUT" "permissions.allow" "and it reminds you of agy's rules"
+}
+
+t_bridge_status_reports_agy_rules() {
+  export AGY_BRIDGE_WINDOWS=0
+  register_agy_plugin "$REPO_ROOT/plugins/agy"
+  run_wrapper bridge status
+  assert_eq 1 "$RC" "status before install reports failure"
+  assert_contains "$OUT" "not installed" "and says so"
+  run_wrapper bridge install
+  # The rule goes through the environment: Git Bash rewrites what looks like a
+  # POSIX path in the arguments of a native program, and the rule has to reach
+  # the file exactly as the wrapper prints it.
+  RULE="command($(bridge_dir)/scripts/ask-claude --read-only)" python3 - "$AGY_SETTINGS_FILE" <<'PY'
+import json, os, sys
+with open(sys.argv[1], encoding="utf-8") as fh:
+    data = json.load(fh)
+data.setdefault("permissions", {}).setdefault("allow", []).append(os.environ["RULE"])
+with open(sys.argv[1], "w", encoding="utf-8") as fh:
+    json.dump(data, fh, indent=2)
+PY
+  run_wrapper bridge status
+  assert_eq 0 "$RC" "status after install succeeds"
+  assert_contains "$OUT" "agy rule for --read-only: present" "the read-only rule is found"
+  assert_contains "$OUT" "agy rule for --allow-write: absent" "the write rule is not"
+}
+
+t_bridge_skill_text_keeps_ampersands() {
+  local out
+  out="$( source "$WRAPPER"; _bridge_skill_text 'run @ASK_CLAUDE@ or @ASK_CLAUDE@ now' 'C:\Tom&Jerry\x' )"
+  assert_eq 'run C:\Tom&Jerry\x or C:\Tom&Jerry\x now' "$out" "a path with & must survive the template"
+}
+
 # ---------------------------------------------------------- regressions ----
 t_json_escaping_round_trips() {
   # A backslash or newline in a path or version string must survive into
@@ -1690,6 +1996,31 @@ it "second-opinion: exits 127 without claude"              t_second_opinion_with
 it "second-opinion: rejects a bad --effort"                t_second_opinion_rejects_a_bad_effort
 it "second-opinion: default timeout fits the tool limit"   t_second_opinion_default_timeout_fits_the_tool_limit
 it "second-opinion: --timeout can raise the limit"         t_second_opinion_timeout_can_be_raised
+
+printf '\n%s\n' "reverse bridge (agy drives Claude Code)"
+it "ask-claude: read-only by default"                      t_ask_claude_is_read_only_by_default
+it "ask-claude: ignores project settings in both modes"    t_ask_claude_ignores_project_settings
+it "ask-claude: --allow-write edits, never runs commands"  t_ask_claude_allow_write_edits_but_never_runs_commands
+it "ask-claude: --allow-write needs an explicit --dir"     t_ask_claude_write_needs_an_explicit_dir
+it "ask-claude: --allow-write refuses a home folder"       t_ask_claude_write_refuses_a_home_folder
+it "ask-claude: write fails closed without --restricted"   t_ask_claude_write_fails_closed_without_restricted
+it "ask-claude: --read-only and --allow-write conflict"    t_ask_claude_modes_contradict
+it "ask-claude: a flag after the task is refused"          t_ask_claude_rejects_a_flag_after_the_task
+it "ask-claude: an unknown flag is refused"                t_ask_claude_rejects_an_unknown_flag
+it "ask-claude: an unquoted task is joined"                t_ask_claude_joins_an_unquoted_task
+it "ask-claude: context goes on stdin"                     t_ask_claude_passes_context_on_stdin
+it "ask-claude: default timeout is 900s"                   t_ask_claude_default_timeout
+it "bridge: install writes the launcher and the skill"     t_bridge_install_writes_launcher_and_skill
+it "bridge: the launcher runs the installed plugin"        t_bridge_launcher_runs_the_installed_plugin
+it "bridge: the launcher follows the registry"             t_bridge_launcher_follows_the_registry
+it "bridge: without a registry, newest cached version"     t_bridge_launcher_falls_back_to_the_newest_cached_version
+it "bridge: a plugin older than the bridge is refused"     t_bridge_launcher_refuses_a_plugin_older_than_the_bridge
+it "bridge: Windows arguments arrive intact"               t_bridge_launcher_decodes_windows_arguments
+it "bridge: Windows gets the PowerShell launcher"          t_bridge_install_on_windows_adds_the_powershell_launcher
+it "bridge: install keeps a file it did not write"         t_bridge_install_keeps_a_file_it_did_not_write
+it "bridge: uninstall removes only its own files"          t_bridge_uninstall_removes_only_its_own_files
+it "bridge: status reports agy's allow rules"              t_bridge_status_reports_agy_rules
+it "bridge: the skill template keeps an & in a path"       t_bridge_skill_text_keeps_ampersands
 
 printf '\n%s\n' "security"
 it "security: cache dir is not world-readable"          t_cache_dir_is_not_world_readable

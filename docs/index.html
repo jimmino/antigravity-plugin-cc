@@ -12,11 +12,11 @@
 <meta property="og:image" content="https://jimmino.github.io/antigravity-plugin-cc/og-image.png" />
 <meta property="og:image:width" content="1200" />
 <meta property="og:image:height" content="630" />
-<meta property="og:image:alt" content="A Claude Code terminal listing the eleven /agy commands, beside the headline: Put Antigravity to work inside Claude Code" />
+<meta property="og:image:alt" content="A Claude Code terminal listing the twelve /agy commands, beside the headline: Put Antigravity to work inside Claude Code" />
 <meta property="og:site_name" content="agy plugin for Claude Code" />
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content="agy Antigravity CLI plugin for Claude Code" />
-<meta name="twitter:description" content="Use Google's Antigravity inside Claude Code. Eleven slash commands, read-only bulk reads, a live model catalogue, MIT." />
+<meta name="twitter:description" content="Use Google's Antigravity inside Claude Code, and let it hand work back. Twelve slash commands, read-only bulk reads, a live model catalogue, MIT." />
 <meta name="twitter:image" content="https://jimmino.github.io/antigravity-plugin-cc/og-image.png" />
 <meta name="theme-color" content="#ffffff" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -480,9 +480,10 @@
   <h1>Delegate tasks to Google <span class="grad">Antigravity</span> from inside Claude Code.</h1>
   <p class="lede">
     A small open-source plugin that wraps the <code class="inline">agy</code> CLI.
-    Eleven slash commands, two subagents, read-only bulk reads that keep the
-    tokens out of your context, code review, deep research, and native image
-    generation without leaving your editor.
+    Twelve slash commands, two subagents, read-only bulk reads that keep the
+    tokens out of your context, code review, deep research, native image
+    generation, and a bridge that lets <code class="inline">agy</code> hand
+    work back to Claude Code.
   </p>
   <div class="hero-cta">
     <a class="btn btn-primary" href="#install">Install in Claude Code</a>
@@ -543,7 +544,7 @@
 <section id="features">
   <div class="container">
     <p class="section-eyebrow">Features</p>
-    <h2 class="section-title">Nine workflows. <span class="grad">Two subagents.</span></h2>
+    <h2 class="section-title">Ten workflows. <span class="grad">Two subagents.</span></h2>
     <p class="section-lede">
       Each tile is one entry point. Talk to Claude naturally or call the slash command directly.
       <code class="inline">/agy:models</code> and <code class="inline">/agy:help</code> list the live model catalogue and every command.
@@ -594,6 +595,11 @@
         <span class="tile-cmd">/agy:second-opinion</span>
         <h3 class="tile-title">An independent view</h3>
         <p class="tile-desc">A fresh Claude Code, read-only in plan mode, that has not seen your conversation. It searches rather than brute-force reads, and tells you what would change its mind.</p>
+      </div>
+      <div class="tile">
+        <span class="tile-cmd">/agy:bridge</span>
+        <h3 class="tile-title">agy drives, Claude works</h3>
+        <p class="tile-desc">Gives <code class="inline">agy</code> a launcher at a fixed path and a skill that hands a task to a headless Claude Code. Read-only unless <code class="inline">agy</code> passes <code class="inline">--allow-write</code>, and even then it never runs commands or touches hook files.</p>
       </div>
     </div>
   </div>
