@@ -1,7 +1,7 @@
 ---
 description: Get an independent second opinion from a fresh Claude Code running read-only in plan mode
 argument-hint: "[--model opus|sonnet|haiku] [--effort L] [--dir <path>] <question>"
-allowed-tools: Bash(bash:*), Read, Grep, Glob
+allowed-tools: ['Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" second-opinion *)', Read, Grep, Glob]
 ---
 
 For a genuine second opinion, use this rather than an `agy` model. It runs real

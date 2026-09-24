@@ -1,7 +1,7 @@
 ---
 description: Generate an image with Antigravity CLI (uses agy's built-in generate_image tool — Imagen under the hood)
 argument-hint: "[--name <slug>] [--output <path>] <description>"
-allowed-tools: Bash(bash:*)
+allowed-tools: ['Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" image *)']
 ---
 
 Ask `agy` to generate an image. The Antigravity CLI ships a native

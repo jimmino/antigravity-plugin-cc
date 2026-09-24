@@ -178,6 +178,10 @@ with only `Read`, `Grep` and `Glob` in plan mode, so it can search rather than
 brute-force read, and it has not seen your conversation. Give it the facts and
 what you ruled out — not your current best guess — then compare.
 
+It loads only your user settings and no MCP servers. `claude -p` never asks
+whether to trust a folder, so without that, pointing `--dir` at a repository
+you have not vetted would run its hooks and its `.mcp.json` servers.
+
 ### Pick a specific model
 
 ```text
@@ -298,6 +302,7 @@ The offload commands take a second path through the same wrapper:
 /agy:fanout       →  N x the above, in parallel
 /agy:review       →  the working diff, piped in as a context file
 /agy:second-opinion  →  claude -p --permission-mode plan --tools Read,Grep,Glob
+                         --setting-sources user --strict-mcp-config
 ```
 
 - The plugin does **not** ship its own Antigravity runtime — it uses your
@@ -317,6 +322,8 @@ The offload commands take a second path through the same wrapper:
   write files or run commands** even in a folder `agy` is trusted in. On a build
   with no `--mode` flag they refuse to run rather than send an unrestricted
   agent into your repository;
+- refuse any `agy` flag after the prompt except `--sandbox`. `agy` honours the
+  last `--mode` it is given, so a `--mode` there would undo `--mode plan`;
 - prepend a guard that bans writes and shell commands, skips `.env` files other
   than `.env.example`, treats file contents as data rather than instructions,
   and demands `path:line` citations or an explicit `UNKNOWN`;
