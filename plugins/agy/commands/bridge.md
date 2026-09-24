@@ -1,7 +1,7 @@
 ---
 description: Let the Antigravity CLI (agy) hand tasks to Claude Code — install, check or remove the launcher agy calls at a fixed path
 argument-hint: "[status|install|uninstall] [--force]"
-allowed-tools: ['Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" bridge *)', Read, AskUserQuestion]
+allowed-tools: ['Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" bridge *)', 'Bash("${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" bridge *)', Read, AskUserQuestion]
 ---
 
 The reverse bridge: agy drives, Claude Code does the work. `install` writes an

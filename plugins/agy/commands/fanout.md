@@ -1,7 +1,7 @@
 ---
 description: Run several Antigravity offload jobs in parallel — one question across many folders, or many questions about one tree
 argument-hint: "[--jobs <file.json>] [--prompt <text>]... [--dir <path>] [--throttle N]"
-allowed-tools: ['Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" fanout *)', Write, Read, Grep, Glob]
+allowed-tools: ['Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" fanout *)', 'Bash("${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" fanout *)', Write, Read, Grep, Glob]
 ---
 
 Each offload takes 1–3 minutes, so concurrency is the whole win. Use this when
