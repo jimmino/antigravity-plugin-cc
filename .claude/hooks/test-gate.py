@@ -10,7 +10,8 @@ Wired up in .claude/settings.json:
               suite and blocks the stop while it fails, so Claude fixes the
               failures before it finishes.
   run         Entry point for people and for the test-runner agent: runs the
-              suite and prints a summary. `run <filter>` runs matching tests
+              suite and prints a summary. At a terminal it also shows each
+              test as it passes or fails. `run <filter>` runs matching tests
               only. Exit 0 = pass, 1 = fail, 2 = could not run.
 
 On native Windows the suite runs through WSL (about 40 s, against about
@@ -25,6 +26,7 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -94,6 +96,23 @@ def one_line(text):
     return " ".join(text.split())
 
 
+def enable_ansi():
+    """True if the terminal renders the suite's ANSI colours. The Windows
+    console does only after it is switched to virtual-terminal mode."""
+    if os.name != "nt":
+        return True
+    try:
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.GetStdHandle(-11)  # STD_OUTPUT_HANDLE
+        mode = ctypes.c_uint32()
+        if not kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+            return False
+        return bool(kernel32.SetConsoleMode(handle, mode.value | 0x0004))
+    except (AttributeError, OSError):
+        return False
+
+
 def has_suite():
     return (ROOT / "tests" / "run-tests.sh").is_file()
 
@@ -128,7 +147,9 @@ def failure_excerpt(text):
     return "\n".join(lines)
 
 
-def run_suite(extra=()):
+def run_suite(extra=(), live=False):
+    """Run the suite. With live=True, echo each line of its output as it
+    arrives, so a person at a terminal sees every test pass or fail."""
     cmd, where = suite_command(list(extra))
     if cmd is None:
         return {"status": "skipped", "note": (
@@ -136,14 +157,27 @@ def run_suite(extra=()):
             "7 minutes, so it was not run. CI still runs it on every PR.")}
     started = time.monotonic()
     try:
-        proc = subprocess.run(cmd, cwd=ROOT, stdin=subprocess.DEVNULL,
-                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                              timeout=SUITE_TIMEOUT)
-        raw, code = proc.stdout, proc.returncode
-    except subprocess.TimeoutExpired as exc:
-        raw, code = exc.output or b"", None
+        proc = subprocess.Popen(cmd, cwd=ROOT, stdin=subprocess.DEVNULL,
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     except OSError as exc:
         return {"status": "skipped", "note": f"could not start the suite: {exc}"}
+    colour = live and enable_ansi()
+    timer = threading.Timer(SUITE_TIMEOUT, proc.kill)
+    timer.start()
+    chunks = []
+    try:
+        for line in iter(proc.stdout.readline, b""):
+            chunks.append(line)
+            if live and b"\0" not in line:  # skip wsl.exe's UTF-16 errors
+                text = line.decode("utf-8", "replace")
+                sys.stdout.write(text if colour else ANSI.sub("", text))
+                sys.stdout.flush()
+        proc.wait()
+    finally:
+        timed_out = not timer.is_alive()
+        timer.cancel()
+    raw = b"".join(chunks)
+    code = None if timed_out else proc.returncode
     text = ANSI.sub("", raw.replace(b"\0", b"").decode("utf-8", "replace"))
     found = SUMMARY.findall(text)
     summary = one_line(found[-1]) if found else ""
@@ -243,7 +277,8 @@ def on_run(args):
         return 2
     sd = state_dir()
     fp = fingerprint()
-    result = run_suite(args)
+    live = sys.stdout.isatty()  # agents read the summary only
+    result = run_suite(args, live=live)
     if result["status"] == "skipped":
         print(result["note"])
         return 2
@@ -253,6 +288,8 @@ def on_run(args):
     else:
         record(sd, fp, result)
         log = sd / "last-run.log"
+    if live:
+        print()
     print(label(result))
     if result["status"] == "pass":
         return 0
