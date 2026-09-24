@@ -5,7 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.7.1] - 2026-09-24
+
+### Security
+- **`/agy:second-opinion` no longer runs a repository's hooks.** `claude -p`
+  never asks whether to trust a folder, so the headless Claude Code it starts
+  loaded `--dir`'s `.claude/settings.json` and `.mcp.json`. Pointed at a
+  repository you had not vetted, that ran the repository's hooks and MCP
+  servers as you, although the command is advertised as read-only. It now runs
+  with `--setting-sources user --strict-mcp-config`, as the Claude Code docs
+  recommend for untrusted folders.
+- **The offload commands stay read-only whatever follows the prompt.** Every
+  argument after the prompt was forwarded to `agy`, after the wrapper's own
+  `--mode plan`, and `agy` honours the last `--mode` it is given (it only warns
+  about an unknown one). `offload "<q>" --mode accept-edits` therefore ran an
+  editing agent, and `--dangerously-skip-permissions` would have auto-approved
+  its shell commands. Only `--sandbox` is now accepted there; anything else
+  exits 64 before `agy` starts.
+- **`/agy:review` no longer lets `.env` files through.** The filter read each
+  path out of the `diff --git` header, which does not delimit a path that holds
+  a space, and names only the old side of a rename. `my config/.env`, and a
+  `.env.example` renamed to `.env`, were both sent. Changed files are now
+  listed NUL-separated and excluded from the diff by exact name. The rule
+  also ignores letter case and covers files under a `.env*` directory, such as
+  cookiecutter-django's `.envs/.production/`.
+- **Commands pre-approve only their own wrapper call.** `allowed-tools:
+  Bash(bash:*)` pre-approved every command starting with `bash` while a
+  `/agy:*` command ran, `bash -c '<anything>'` included, and `/agy:setup` did
+  the same for any `curl`. Each command now pre-approves only
+  `bash "<plugin>/scripts/agy-run.sh" <its subcommand> …`, and the `agy`
+  installer always gets Claude Code's own permission prompt.
 
 ### Changed
 - **The fork owns its metadata.** The marketplace owner and plugin author now

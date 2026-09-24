@@ -1,7 +1,7 @@
 ---
 description: Run several Antigravity offload jobs in parallel — one question across many folders, or many questions about one tree
 argument-hint: "[--jobs <file.json>] [--prompt <text>]... [--dir <path>] [--throttle N]"
-allowed-tools: Bash(bash:*), Write, Read, Grep, Glob
+allowed-tools: ['Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" fanout *)', Write, Read, Grep, Glob]
 ---
 
 Each offload takes 1–3 minutes, so concurrency is the whole win. Use this when
@@ -19,9 +19,11 @@ $ARGUMENTS
 For a handful of short questions against one directory:
 
 ```
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" fanout --dir <abs-path> \
-  --prompt "<question one>" --prompt "<question two>" --throttle 3
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" fanout --dir <abs-path> --prompt "<question one>" --prompt "<question two>" --throttle 3
 ```
+
+Keep the call on one line, in exactly the shape above: it is the only shape
+this command pre-approves.
 
 For anything with per-job directories or models, write a jobs file first:
 

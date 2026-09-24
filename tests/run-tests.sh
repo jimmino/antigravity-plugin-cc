@@ -59,6 +59,9 @@ JSON
   unset FAKE_AGY_CTX_COPY FAKE_CLAUDE_PWD FAKE_TIMEOUT_LOG 2>/dev/null || true
   unset FAKE_CLAUDE_ARGV FAKE_CLAUDE_STDIN FAKE_CLAUDE_RESULT FAKE_CLAUDE_ERROR 2>/dev/null || true
   unset AGY_FORCE_LEGACY_MODEL AGY_QUIET AGY_ALLOW_PREVIEW 2>/dev/null || true
+  # Set when the suite runs from a Claude Code hook or tool call. The wrapper
+  # prefers it to $PWD, which would point review and offload at the real repo.
+  unset CLAUDE_PROJECT_DIR 2>/dev/null || true
   export AGY_MODELS_CACHE_TTL=3600
 }
 
@@ -906,6 +909,12 @@ claude_argv_has() {
   grep -Fxq -- "$1" "$FAKE_CLAUDE_ARGV"
 }
 
+# The argument that follows $1 in claude's recorded argv.
+claude_argv_after() {
+  [ -f "${FAKE_CLAUDE_ARGV:-}" ] || return 0
+  awk -v flag="$1" 'prev == flag { print; exit } { prev = $0 }' "$FAKE_CLAUDE_ARGV"
+}
+
 t_offload_runs_read_only() {
   export FAKE_AGY_RESPONSE="AUTH | src/a.ts:1 | ok"
   run_wrapper offload --dir "$SANDBOX" "where is auth"
@@ -1048,6 +1057,30 @@ t_offload_warns_about_token_files_in_a_root() {
   assert_contains "$ERR" "Narrow --dir" "with the remedy"
 }
 
+t_offload_refuses_flags_after_the_prompt() {
+  # agy honours the last --mode it is given, so one after the prompt would
+  # replace the wrapper's plan mode.
+  export FAKE_AGY_RESPONSE="ok"
+  run_wrapper offload --dir "$SANDBOX" "q" --mode accept-edits
+  assert_eq 64 "$RC" "--mode after the prompt must be refused"
+  assert_contains "$ERR" "except --sandbox" "and the refusal says what is allowed"
+  run_wrapper offload --dir "$SANDBOX" "q" --mode=accept-edits
+  assert_eq 64 "$RC" "--mode=value after the prompt must be refused"
+  run_wrapper offload --dir "$SANDBOX" "q" --dangerously-skip-permissions
+  assert_eq 64 "$RC" "--dangerously-skip-permissions must be refused"
+  run_wrapper offload --dir "$SANDBOX" "q" --sandbox --add-dir /
+  assert_eq 64 "$RC" "an allowed flag does not let others through"
+  if [ -s "$FAKE_AGY_ARGV_LOG" ]; then fail_msg "agy must not run at all when a flag is refused"; fi
+}
+
+t_offload_forwards_sandbox_after_the_prompt() {
+  export FAKE_AGY_RESPONSE="ok"
+  run_wrapper offload --dir "$SANDBOX" "q" --sandbox
+  assert_eq 0 "$RC" "--sandbox only narrows the run, so it is allowed"
+  argv_has "--sandbox" || fail_msg "--sandbox must reach agy"
+  argv_has "plan"      || fail_msg "and the run stays in plan mode"
+}
+
 # -------------------------------------------------------------- fanout ----
 t_fanout_runs_several_prompts() {
   export FAKE_AGY_RESPONSE="an answer" FAKE_AGY_ARGV_APPEND=1
@@ -1126,11 +1159,134 @@ t_review_omits_dotenv_but_keeps_the_example() {
     && echo two >> app.js \
     && echo "SECRET=LEAKED-VALUE" > .env \
     && echo "KEY2=y" >> .env.example ) >/dev/null 2>&1
-  export FAKE_AGY_RESPONSE="ok"
-  local err
-  err="$( ( cd "$SANDBOX/repo" && bash "$WRAPPER" review ) 2>&1 >/dev/null )"
-  assert_contains "$err" "omitted from the review" ".env must be dropped, loudly"
-  if argv_contains "LEAKED-VALUE"; then fail_msg "a .env value must never reach the prompt"; fi
+  review_capturing_context
+  assert_contains "$ERR" "omitted from the review" ".env must be dropped, loudly"
+  # The diff travels in the context file, never in argv, so that is where a
+  # leak would show.
+  assert_not_contains "$(review_context)" "LEAKED-VALUE" "a .env value must never reach agy"
+  assert_contains "$(review_context)" "KEY2=y" "the .env.example change is still reviewed"
+}
+
+# A repository whose first commit holds $1 with SECRET=old. The working tree
+# then sets it to SECRET=LEAKED-VALUE and adds APP-CHANGE to app.js.
+make_repo_with_secret_change() {
+  local secret="$1"
+  mkdir -p "$SANDBOX/repo"
+  ( cd "$SANDBOX/repo" \
+    && git init -q . \
+    && git config user.email t@e.st && git config user.name test \
+    && mkdir -p "$(dirname "$secret")" \
+    && echo one > app.js && echo "SECRET=old" > "$secret" \
+    && git add -A && git commit -qm init \
+    && echo APP-CHANGE >> app.js && echo "SECRET=LEAKED-VALUE" > "$secret" ) >/dev/null 2>&1
+}
+
+# Runs review with --dir $1 (default: the sandbox repo) plus any further
+# arguments. Keeps the wrapper's stderr in ERR and a copy of the context file
+# agy was given, which review_context prints.
+review_capturing_context() {
+  local where="${1:-$SANDBOX/repo}"
+  if [ $# -gt 0 ]; then shift; fi
+  export FAKE_AGY_RESPONSE="ok" FAKE_AGY_CTX_COPY="$SANDBOX/ctx.md"
+  ERR="$( ( cd "$where" && bash "$WRAPPER" review --dir "$where" "$@" ) 2>&1 >/dev/null )"
+}
+
+review_context() { cat "$SANDBOX/ctx.md" 2>/dev/null || true; }
+
+t_review_omits_dotenv_in_a_dir_with_a_space() {
+  make_repo_with_secret_change "my config/.env"
+  review_capturing_context
+  assert_contains "$(review_context)" "APP-CHANGE" "the rest of the diff is reviewed"
+  assert_not_contains "$(review_context)" "LEAKED-VALUE" "a .env under a directory with a space must not be sent"
+  assert_contains "$ERR" "(holds secrets): my config/.env" "and the omission names the whole path"
+}
+
+t_review_omits_dotenv_renamed_from_the_example() {
+  mkdir -p "$SANDBOX/repo"
+  ( cd "$SANDBOX/repo" \
+    && git init -q . \
+    && git config user.email t@e.st && git config user.name test \
+    && printf 'KEY_%s=placeholder\n' 1 2 3 4 5 6 7 8 9 10 > .env.example \
+    && echo one > app.js && git add -A && git commit -qm init \
+    && git mv .env.example .env && echo "SECRET=LEAKED-VALUE" >> .env \
+    && echo APP-CHANGE >> app.js ) >/dev/null 2>&1
+  # Big enough for git to pair the two files as a rename; a smaller example
+  # shows up as a delete plus an add, which never exercised the bug.
+  case "$(git -C "$SANDBOX/repo" diff HEAD -M --name-status 2>/dev/null)" in
+    R*) : ;;
+    *)  fail_msg "setup: git should report a rename here, or this test proves nothing" ;;
+  esac
+  review_capturing_context
+  assert_contains "$(review_context)" "APP-CHANGE" "the rest of the diff is reviewed"
+  assert_not_contains "$(review_context)" "LEAKED-VALUE" "a .env renamed from .env.example must not be sent"
+}
+
+t_review_omits_files_under_a_dotenvs_dir() {
+  make_repo_with_secret_change ".envs/.production/.django"
+  review_capturing_context
+  assert_contains "$(review_context)" "APP-CHANGE" "the rest of the diff is reviewed"
+  assert_not_contains "$(review_context)" "LEAKED-VALUE" "a file under .envs/ must not be sent"
+}
+
+t_review_omits_dotenv_whatever_its_case() {
+  make_repo_with_secret_change "config/.ENV.local"
+  review_capturing_context
+  assert_contains "$(review_context)" "APP-CHANGE" "the rest of the diff is reviewed"
+  assert_not_contains "$(review_context)" "LEAKED-VALUE" "an upper-case .ENV must not be sent"
+}
+
+t_review_omits_a_root_dotenv_from_a_subfolder() {
+  # git lists changed files relative to the repository root, not to --dir.
+  make_repo_with_secret_change ".env"
+  mkdir -p "$SANDBOX/repo/sub"
+  review_capturing_context "$SANDBOX/repo/sub"
+  assert_contains "$(review_context)" "APP-CHANGE" "the whole repository's diff is reviewed"
+  assert_not_contains "$(review_context)" "LEAKED-VALUE" "a root .env must not be sent when --dir is a subfolder"
+}
+
+t_commands_preapprove_only_their_own_wrapper_call() {
+  # A broad rule such as Bash(bash:*) pre-approves `bash -c '<anything>'` for
+  # as long as a command runs. Each command may pre-approve only the wrapper
+  # subcommand it documents, and nothing that downloads or runs other code.
+  local prefix='bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" '
+  local f name want rules rule line n=0
+  for f in "$REPO_ROOT"/plugins/agy/commands/*.md; do
+    name="$(basename "$f" .md)"
+    want="$name"
+    if [ "$name" = "setup" ]; then want="check"; fi
+    rules="$(sed -n 's/^allowed-tools:[[:space:]]*//p' "$f" | grep -oE 'Bash\([^)]*\)' || true)"
+    while IFS= read -r rule; do
+      [ -n "$rule" ] || continue
+      n=$((n + 1))
+      case "$rule" in
+        "Bash(${prefix}${want})"|"Bash(${prefix}${want} *)") : ;;
+        *) fail_msg "$name.md pre-approves more than its own wrapper call: $rule" ;;
+      esac
+    done <<<"$rules"
+    # Claude Code matches a rule against the command text Claude writes, so
+    # every documented call has to have exactly the shape the rule allows.
+    while IFS= read -r line; do
+      case "$line" in
+        *"${prefix}${want}"*) : ;;
+        *) fail_msg "$name.md documents a call its rule does not cover: $line" ;;
+      esac
+    done < <(grep -F 'agy-run.sh"' "$f" || true)
+  done
+  [ "$n" -ge 9 ] || fail_msg "expected a Bash rule in each of the 9 wrapper commands, found $n"
+}
+
+t_secret_path_predicate() {
+  local p
+  for p in ".env" ".env.local" "a/b/.env.production" "my config/.env" ".ENV" \
+           "Config/.Env.Local" ".envs/.production/.django" "deploy/.envs/app.yml" ".envrc"; do
+    ( source "$WRAPPER"; _path_holds_secrets "$p" ) || fail_msg "'$p' should count as holding secrets"
+  done
+  for p in ".env.example" "config/.env.example" ".ENV.EXAMPLE" "env.txt" \
+           "src/environment.ts" "my.env" "docs/env/notes.md"; do
+    if ( source "$WRAPPER"; _path_holds_secrets "$p" ); then
+      fail_msg "'$p' should not count as holding secrets"
+    fi
+  done
 }
 
 t_review_names_untracked_files() {
@@ -1198,6 +1354,16 @@ t_second_opinion_rejects_a_bad_effort() {
   install_fake_claude
   run_wrapper second-opinion --effort turbo "why"
   assert_eq 64 "$RC" "an invalid effort is a usage error"
+}
+
+t_second_opinion_ignores_project_settings() {
+  # `claude -p` skips the folder-trust prompt, so a repository's own
+  # .claude/settings.json would run its hooks the moment --dir points at it.
+  install_fake_claude
+  run_wrapper second-opinion --dir "$SANDBOX" "why"
+  assert_eq 0 "$RC" "the second opinion should succeed"
+  assert_eq "user" "$(claude_argv_after --setting-sources)" "only the user's own settings may load"
+  claude_argv_has "--strict-mcp-config" || fail_msg "MCP servers must be left out"
 }
 
 # Stands in for coreutils timeout: records the limit it was given, then runs
@@ -1530,6 +1696,16 @@ it "security: cache dir is not world-readable"          t_cache_dir_is_not_world
 it "security: malformed catalogue rows are dropped"     t_catalogue_rejects_malformed_rows
 it "security: alias values are never executed"          t_aliases_file_is_never_executed
 it "security: catalogue content is never executed"      t_catalogue_content_is_never_executed
+it "security: offload refuses agy flags after the prompt"  t_offload_refuses_flags_after_the_prompt
+it "security: offload still forwards --sandbox"            t_offload_forwards_sandbox_after_the_prompt
+it "security: second-opinion ignores project settings"     t_second_opinion_ignores_project_settings
+it "security: commands pre-approve only their own call"    t_commands_preapprove_only_their_own_wrapper_call
+it "security: secret-holding paths are recognised"         t_secret_path_predicate
+it "security: review omits a .env under a spaced dir"      t_review_omits_dotenv_in_a_dir_with_a_space
+it "security: review omits a .env renamed from example"    t_review_omits_dotenv_renamed_from_the_example
+it "security: review omits files under .envs/"             t_review_omits_files_under_a_dotenvs_dir
+it "security: review omits .env whatever its case"         t_review_omits_dotenv_whatever_its_case
+it "security: review omits a root .env from a subfolder"   t_review_omits_a_root_dotenv_from_a_subfolder
 
 printf '
 %s

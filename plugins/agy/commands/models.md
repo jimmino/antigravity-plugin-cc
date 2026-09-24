@@ -1,7 +1,7 @@
 ---
 description: List the models the installed Antigravity CLI actually offers, plus the alias mapping
 argument-hint: "[--refresh]"
-allowed-tools: Bash(bash:*)
+allowed-tools: ['Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" models *)']
 ---
 
 Show the live model catalogue. Print the wrapper's stdout verbatim as a fenced

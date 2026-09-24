@@ -1,7 +1,7 @@
 ---
 description: Run a one-shot prompt through the Antigravity CLI and return its output verbatim
 argument-hint: "[--model <alias|id>] [--effort low|medium|high] <prompt>"
-allowed-tools: Bash(bash:*)
+allowed-tools: ['Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" ask *)']
 ---
 
 Forward the user's request below to `agy -p` via the wrapper script. Return

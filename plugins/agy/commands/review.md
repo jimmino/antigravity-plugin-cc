@@ -1,7 +1,7 @@
 ---
 description: Send the current git diff to the Antigravity CLI for an independent review, then verify every finding
 argument-hint: "[--model <alias|id>] [--effort low|medium|high] [focus text] [-- paths...]"
-allowed-tools: Bash(bash:*), Read, Grep, Glob
+allowed-tools: ['Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" review *)', Read, Grep, Glob]
 ---
 
 Get an independent review of the working diff, then filter it.
@@ -36,9 +36,10 @@ focus text. Set the Bash tool timeout to 600000 ms.
 
 The wrapper collects `git diff HEAD` (falling back to `git diff`), pipes it in
 as a context file rather than on the command line, holds the run read-only, and
-names any untracked files so the model reads them off disk. Any `.env` other
-than `.env.example` is dropped from the diff before it leaves the machine, and
-the wrapper says which.
+names any untracked files so the model reads them off disk. Any `.env*` file
+other than `.env.example`, in any letter case, and anything under a `.env*`
+directory such as `.envs/.production/`, is dropped from the diff before it
+leaves the machine, and the wrapper says which.
 
 ## Model choice
 

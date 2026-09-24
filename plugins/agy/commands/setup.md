@@ -1,6 +1,6 @@
 ---
 description: Verify the Antigravity CLI (`agy`) is installed and authenticated; offer to install it if missing
-allowed-tools: Bash(bash:*), Bash(curl:*), AskUserQuestion
+allowed-tools: ['Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" check)', AskUserQuestion]
 ---
 
 Run:
@@ -17,6 +17,8 @@ Then interpret the JSON output:
     ```bash
     curl -fsSL https://antigravity.google/cli/install.sh | bash
     ```
+    This command is deliberately not pre-approved, so the user also sees
+    Claude Code's own permission prompt before a remote script runs.
     Then re-run the check.
   - `Skip for now` — explain that `/agy:ask`, `/agy:offload`, `/agy:fanout`,
     `/agy:delegate`, `/agy:research`, `/agy:review`, `/agy:image` and

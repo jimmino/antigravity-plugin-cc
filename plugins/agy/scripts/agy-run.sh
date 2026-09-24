@@ -937,6 +937,27 @@ cmd_ask() {
   run_agy_prompt "$PARSED_MODEL_ID" "$PARSED_MODEL_LABEL" "$PARSED_EFFORT" "$path" "$prompt" "$@"
 }
 
+# True when a changed path may hold secrets and must never leave the machine: a
+# file whose name starts with `.env`, other than the `.env.example` template,
+# or anything under a directory whose name does (cookiecutter-django keeps its
+# secrets in `.envs/.production/`). Case-insensitive, for Windows checkouts.
+# Case patterns rather than a lowercasing pipe, as this runs once per file.
+_path_holds_secrets() {
+  local p="$1" dir
+  case "${p##*/}" in
+    .[eE][nN][vV].[eE][xX][aA][mM][pP][lL][eE]) ;;
+    .[eE][nN][vV]*) return 0 ;;
+  esac
+  case "$p" in
+    */*) dir="/${p%/*}/" ;;
+    *)   return 1 ;;
+  esac
+  case "$dir" in
+    */.[eE][nN][vV]*/*) return 0 ;;
+  esac
+  return 1
+}
+
 # Review runs through the offload path, not a plain prompt: the diff goes in as
 # a context file rather than on the command line (Windows caps argv at ~32K, and
 # a real diff blows straight past it), the run is held read-only, and the answer
@@ -970,58 +991,63 @@ cmd_review() {
   local repo_dir="$dir"
   if [ -z "$repo_dir" ]; then repo_dir="${CLAUDE_PROJECT_DIR:-$PWD}"; fi
 
-  local diff=""
-  if [ "${#paths[@]}" -gt 0 ]; then
-    diff="$(git -C "$repo_dir" diff HEAD -- ${paths[@]+"${paths[@]}"} 2>/dev/null || true)"
-    if [ -z "$diff" ]; then
-      diff="$(git -C "$repo_dir" diff -- ${paths[@]+"${paths[@]}"} 2>/dev/null || true)"
-    fi
-  else
-    diff="$(git -C "$repo_dir" diff HEAD 2>/dev/null || true)"
-    if [ -z "$diff" ]; then
-      diff="$(git -C "$repo_dir" diff 2>/dev/null || true)"
-    fi
+  # Against HEAD when there is one, which covers staged and unstaged work
+  # alike; against the index in a repository with no commits yet. A user's
+  # diff.relative would make the file list below relative to --dir instead of
+  # the repository root, so it is switched off.
+  local git_diff=(git -C "$repo_dir" -c diff.relative=false diff --no-renames)
+  if git -C "$repo_dir" rev-parse --verify -q HEAD >/dev/null 2>&1; then
+    git_diff+=(HEAD)
   fi
-  if [ -z "$diff" ]; then
+
+  # A .env in the diff would be pasted verbatim into a third-party context, so
+  # the changed files are listed first, NUL-separated, and any that hold
+  # secrets are excluded by exact name. Reading them out of the `diff --git`
+  # header let a .env through: the header does not delimit a path that holds a
+  # space, and a rename names the old file, so `.env.example` -> `.env` passed
+  # as the example. With renames off, a new name is always listed on its own.
+  local listing p omitted=() excludes=()
+  listing="$(mktemp)"
+  if ! "${git_diff[@]}" --name-only -z -- ${paths[@]+"${paths[@]}"} >"$listing" 2>/dev/null; then
+    rm -f "$listing"
     echo "error: no git diff found in $repo_dir. Stage or make changes first." >&2
     exit 1
   fi
-
-  # A .env in the diff would be pasted verbatim into a third-party context.
-  local omitted
-  omitted="$(printf '%s\n' "$diff" | awk '
-    /^diff --git / { p=$3; sub(/^a\//, "", p); b=p; sub(/^.*\//, "", b)
-                     if (b ~ /^\.env/ && b != ".env.example") print p }' || true)"
-  if [ -n "$omitted" ]; then
-    diff="$(printf '%s\n' "$diff" | awk '
-      /^diff --git / { p=$3; sub(/^a\//, "", p); b=p; sub(/^.*\//, "", b)
-                       skip = (b ~ /^\.env/ && b != ".env.example") ? 1 : 0 }
-      skip != 1 { print }')"
-    while IFS= read -r line; do
-      [ -z "$line" ] || echo "[wrapper] omitted from the review (holds secrets): $line" >&2
-    done <<<"$omitted"
-    if [ -z "${diff//[[:space:]]/}" ]; then
-      echo "error: the only changes in $repo_dir are to .env files, which are never sent for review." >&2
-      exit 1
+  while IFS= read -r -d '' p; do
+    if _path_holds_secrets "$p"; then
+      omitted+=("$p")
+      # top: the list is relative to the repository root, whatever --dir is.
+      excludes+=(":(top,exclude,literal)$p")
     fi
+  done <"$listing"
+  rm -f "$listing"
+
+  local diff=""
+  diff="$("${git_diff[@]}" -- ${paths[@]+"${paths[@]}"} ${excludes[@]+"${excludes[@]}"} 2>/dev/null)" || diff=""
+  for p in ${omitted[@]+"${omitted[@]}"}; do
+    echo "[wrapper] omitted from the review (holds secrets): $p" >&2
+  done
+  if [ -z "$diff" ]; then
+    if [ "${#omitted[@]}" -gt 0 ]; then
+      echo "error: the only changes in $repo_dir are to .env files, which are never sent for review." >&2
+    else
+      echo "error: no git diff found in $repo_dir. Stage or make changes first." >&2
+    fi
+    exit 1
   fi
 
   # New files are not in `git diff HEAD`. Name them so the model reads them off
   # disk instead of reviewing a change it cannot see — scoped to the requested
   # paths, and never a .env, which the guard forbids it to open anyway.
-  local untracked="" u base n_untracked=0
-  while IFS= read -r u; do
+  local untracked="" u n_untracked=0
+  while IFS= read -r -d '' u; do
     [ -n "$u" ] || continue
-    base="${u##*/}"
-    case "$base" in
-      .env.example) : ;;
-      .env*) continue ;;
-    esac
+    if _path_holds_secrets "$u"; then continue; fi
     untracked="${untracked:+$untracked
 }$u"
     n_untracked=$(( n_untracked + 1 ))
     if [ "$n_untracked" -ge 40 ]; then break; fi
-  done < <(git -C "$repo_dir" ls-files --others --exclude-standard -- ${paths[@]+"${paths[@]}"} 2>/dev/null || true)
+  done < <(git -C "$repo_dir" ls-files -z --others --exclude-standard -- ${paths[@]+"${paths[@]}"} 2>/dev/null || true)
 
   local focus_line=""
   if [ -n "$focus" ]; then focus_line="Focus: $focus"; fi
@@ -1358,10 +1384,13 @@ _offload_usage() {
 usage: agy-run.sh offload [--model <alias|id>] [--effort low|medium|high]
                           [--dir <path>] [--add-dir <path>]... [--label <name>]
                           [--budget <seconds>] [--timeout <duration>]
-                          [--stdin] [--no-fallback] [--raw] <prompt> [agy flags...]
+                          [--stdin] [--no-fallback] [--raw] <prompt> [--sandbox]
 
 Long context (a diff, a log excerpt, background) is piped in with --stdin. It
 never goes in the prompt argument, which travels on the command line.
+
+The run is held read-only, so the only agy flag accepted after the prompt is
+--sandbox. Anything else there is refused.
 USAGE
 }
 
@@ -1417,6 +1446,19 @@ cmd_offload() {
     _offload_usage
     exit 64
   fi
+  # Nothing after the prompt reaches agy except --sandbox, which only narrows
+  # the run further. agy lets a later --mode replace the --mode plan this
+  # wrapper sets, and --dangerously-skip-permissions turns the auto-deny that
+  # blocks shell commands into an auto-approve: either makes this an ordinary
+  # read-write run.
+  local extra
+  for extra in ${OFFLOAD_EXTRA[@]+"${OFFLOAD_EXTRA[@]}"}; do
+    if [ "$extra" != "--sandbox" ]; then
+      echo "error: offload forwards nothing after the prompt except --sandbox; got '$extra'." >&2
+      echo "       The run has to stay read-only. Put the wrapper's own flags before the prompt." >&2
+      exit 64
+    fi
+  done
   if [ "$model_seen" = "1" ] && [ -z "$model_alias" ]; then
     resolve_model ""   # exits 64 with the model table
   fi
@@ -1951,18 +1993,22 @@ $ctx"
   infile="$(mktemp)"; outfile="$(mktemp)"; errfile="$(mktemp)"; ansfile="$(mktemp)"
   printf '%s\n\nTask:\n%s%s\n' "$guard" "$question" "$ctx" > "$infile"
 
+  # Only the user's own settings load. `claude -p` never asks whether to trust
+  # a folder, so a repository's .claude/settings.json — hooks, apiKeyHelper
+  # and the like — would otherwise run the moment --dir pointed at it. MCP
+  # servers are left out too: --tools limits only the built-in tools.
+  local cargv=(-p --output-format json --model "$model" --effort "$effort"
+               --tools "Read,Grep,Glob" --permission-mode plan --permission-prompts none
+               --setting-sources user --strict-mcp-config --add-dir "$dir")
+
   # Run from --dir, not from wherever the wrapper was launched: Grep and Glob
   # search the working directory by default, and the question never names it.
   local start end secs rc=0
   start="$(date +%s 2>/dev/null || echo 0)"
   if command -v timeout >/dev/null 2>&1; then
-    ( cd "$dir" && timeout "${tmo}s" "$claude_bin" -p --output-format json --model "$model" --effort "$effort" \
-      --tools Read,Grep,Glob --permission-mode plan --permission-prompts none \
-      --add-dir "$dir" ) <"$infile" >"$outfile" 2>"$errfile" || rc=$?
+    ( cd "$dir" && timeout "${tmo}s" "$claude_bin" "${cargv[@]}" ) <"$infile" >"$outfile" 2>"$errfile" || rc=$?
   else
-    ( cd "$dir" && "$claude_bin" -p --output-format json --model "$model" --effort "$effort" \
-      --tools Read,Grep,Glob --permission-mode plan --permission-prompts none \
-      --add-dir "$dir" ) <"$infile" >"$outfile" 2>"$errfile" || rc=$?
+    ( cd "$dir" && "$claude_bin" "${cargv[@]}" ) <"$infile" >"$outfile" 2>"$errfile" || rc=$?
   fi
   end="$(date +%s 2>/dev/null || echo 0)"
   secs=$(( end - start ))

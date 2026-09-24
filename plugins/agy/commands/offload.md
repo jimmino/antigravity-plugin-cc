@@ -1,7 +1,7 @@
 ---
 description: Offload a read-only bulk read to the Antigravity CLI and get back a short, cited answer
 argument-hint: "[--model <alias|id>] [--dir <path>] [--add-dir <path>] <question>"
-allowed-tools: Bash(bash:*), Read, Grep, Glob
+allowed-tools: ['Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" offload *)', Read, Grep, Glob]
 ---
 
 Offload the question below so the bulk tokens land in the model's context
@@ -64,6 +64,9 @@ Flags, all before the prompt:
 - `--budget <seconds>` — total across all attempts (default 540, under Claude
   Code's 600s tool kill). Set the Bash tool timeout to 600000 ms.
 - `--effort low|medium|high`, `--timeout <duration>`, `--no-fallback`, `--raw`.
+
+After the prompt, only `--sandbox` is accepted. Any other agy flag there is
+refused, because one such as `--mode` would switch off the read-only guard.
 
 Run it with `run_in_background: true` — each call takes 1–3 minutes.
 
