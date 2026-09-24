@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.2] - 2026-09-24
+
+### Fixed
+- **Commands no longer ask for permission when Claude runs the wrapper
+  directly.** 0.7.1 pre-approved only the documented call,
+  `bash "<plugin>/scripts/agy-run.sh" <subcommand> …`. Claude Code matches a
+  rule against the exact command text, and in live runs haiku dropped the
+  leading `bash` in two of three attempts. It ran
+  `"<plugin>/scripts/agy-run.sh" <subcommand> …` instead, which then needed
+  approval. Each command now also pre-approves that direct form. Verified live
+  on Windows with Claude Code 2.1.278 under `--permission-mode dontAsk`: both
+  forms run without a prompt, and `bash -c '…'` is still refused.
+
 ## [0.7.1] - 2026-09-24
 
 ### Security
