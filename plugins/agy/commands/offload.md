@@ -1,7 +1,7 @@
 ---
 description: Offload a read-only bulk read to the Antigravity CLI and get back a short, cited answer
 argument-hint: "[--model <alias|id>] [--dir <path>] [--add-dir <path>] <question>"
-allowed-tools: ['Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" offload *)', Read, Grep, Glob]
+allowed-tools: ['Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" offload *)', 'Bash("${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" offload *)', Read, Grep, Glob]
 ---
 
 Offload the question below so the bulk tokens land in the model's context

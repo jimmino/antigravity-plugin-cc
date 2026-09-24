@@ -1,6 +1,6 @@
 ---
 description: Verify the Antigravity CLI (`agy`) is installed and authenticated; offer to install it if missing
-allowed-tools: ['Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" check)', AskUserQuestion]
+allowed-tools: ['Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" check)', 'Bash("${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" check)', AskUserQuestion]
 ---
 
 Run:

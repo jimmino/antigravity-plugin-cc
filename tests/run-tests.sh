@@ -1248,21 +1248,29 @@ t_commands_preapprove_only_their_own_wrapper_call() {
   # A broad rule such as Bash(bash:*) pre-approves `bash -c '<anything>'` for
   # as long as a command runs. Each command may pre-approve only the wrapper
   # subcommand it documents, and nothing that downloads or runs other code.
-  local prefix='bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" '
-  local f name want rules rule line n=0
+  # It needs the call both with and without the leading `bash`: measured,
+  # Claude sometimes drops it and runs the script directly, and a rule for
+  # one form does not match the other.
+  local script='"${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" '
+  local prefix="bash $script"
+  local f name want rules rule line n=0 via_bash direct
   for f in "$REPO_ROOT"/plugins/agy/commands/*.md; do
     name="$(basename "$f" .md)"
     want="$name"
     if [ "$name" = "setup" ]; then want="check"; fi
     rules="$(sed -n 's/^allowed-tools:[[:space:]]*//p' "$f" | grep -oE 'Bash\([^)]*\)' || true)"
+    [ -n "$rules" ] || continue
+    n=$((n + 1)); via_bash=0; direct=0
     while IFS= read -r rule; do
       [ -n "$rule" ] || continue
-      n=$((n + 1))
       case "$rule" in
-        "Bash(${prefix}${want})"|"Bash(${prefix}${want} *)") : ;;
+        "Bash(${prefix}${want})"|"Bash(${prefix}${want} *)") via_bash=1 ;;
+        "Bash(${script}${want})"|"Bash(${script}${want} *)") direct=1 ;;
         *) fail_msg "$name.md pre-approves more than its own wrapper call: $rule" ;;
       esac
     done <<<"$rules"
+    [ "$via_bash" = 1 ] || fail_msg "$name.md has no rule for the documented call through bash"
+    [ "$direct" = 1 ]   || fail_msg "$name.md has no rule for the script run directly, without bash"
     # Claude Code matches a rule against the command text Claude writes, so
     # every documented call has to have exactly the shape the rule allows.
     while IFS= read -r line; do
@@ -1272,7 +1280,7 @@ t_commands_preapprove_only_their_own_wrapper_call() {
       esac
     done < <(grep -F 'agy-run.sh"' "$f" || true)
   done
-  [ "$n" -ge 9 ] || fail_msg "expected a Bash rule in each of the 9 wrapper commands, found $n"
+  [ "$n" -ge 9 ] || fail_msg "expected Bash rules in each of the 9 wrapper commands, found $n"
 }
 
 t_secret_path_predicate() {

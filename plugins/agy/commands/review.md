@@ -1,7 +1,7 @@
 ---
 description: Send the current git diff to the Antigravity CLI for an independent review, then verify every finding
 argument-hint: "[--model <alias|id>] [--effort low|medium|high] [focus text] [-- paths...]"
-allowed-tools: ['Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" review *)', Read, Grep, Glob]
+allowed-tools: ['Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" review *)', 'Bash("${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" review *)', Read, Grep, Glob]
 ---
 
 Get an independent review of the working diff, then filter it.
