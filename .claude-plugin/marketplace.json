@@ -6,13 +6,13 @@
   },
   "metadata": {
     "description": "Antigravity CLI integration for Claude Code — delegate tasks to Google's `agy` from inside your editor. Forked from simplybychris/antigravity-plugin-cc.",
-    "version": "0.7.2"
+    "version": "0.8.0"
   },
   "plugins": [
     {
       "name": "agy",
-      "description": "Use the Google Antigravity CLI (`agy`) from Claude Code — slash commands /agy:setup, /agy:models, /agy:ask, /agy:offload, /agy:fanout, /agy:second-opinion, /agy:delegate, /agy:research, /agy:review, /agy:image, /agy:help. Offload commands run agy read-only and keep the bulk tokens out of your context. Model selection is discovered from `agy models` at runtime, with intent aliases and user-defined aliases, so new model releases need no plugin update. Forked from simplybychris/antigravity-plugin-cc.",
-      "version": "0.7.2",
+      "description": "Use the Google Antigravity CLI (`agy`) from Claude Code — slash commands /agy:setup, /agy:models, /agy:ask, /agy:offload, /agy:fanout, /agy:second-opinion, /agy:bridge, /agy:delegate, /agy:research, /agy:review, /agy:image, /agy:help. Offload commands run agy read-only and keep the bulk tokens out of your context. /agy:bridge lets agy hand tasks back to Claude Code, read-only unless it asks to write. Model selection is discovered from `agy models` at runtime, with intent aliases and user-defined aliases, so new model releases need no plugin update. Forked from simplybychris/antigravity-plugin-cc.",
+      "version": "0.8.0",
       "author": {
         "name": "jimmino",
         "url": "https://github.com/jimmino"

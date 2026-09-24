@@ -60,9 +60,10 @@ jobs:
       - name: Install shellcheck
         run: sudo apt-get update && sudo apt-get install -y shellcheck
 
-      - name: Lint wrapper and tests
+      - name: Lint wrapper, bridge launcher and tests
         run: |
           shellcheck -s bash -e SC2016 plugins/agy/scripts/agy-run.sh
+          shellcheck -s bash plugins/agy/scripts/bridge/ask-claude
           shellcheck -s bash -e SC2016,SC2329,SC2317,SC1090 tests/run-tests.sh tests/fixtures/fake-agy tests/fixtures/fake-claude
 
   manifest:

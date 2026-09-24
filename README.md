@@ -36,6 +36,10 @@ just Bash and `agy`.
 - **`/agy:second-opinion [--model opus|sonnet|haiku] <question>`** — an
   independent answer from a fresh Claude Code running read-only in plan mode,
   for when you want a view that has not seen your conversation.
+- **`/agy:bridge [status|install|uninstall]`** — the other direction: `agy`
+  drives and Claude Code does the work. Installs a launcher at a fixed path
+  that `agy` can call, and an `ask-claude` skill that tells `agy` how.
+  Read-only unless `agy` passes `--allow-write`.
 - **`/agy:help`** — show all commands and the live model/alias table.
 - **`agy:runner` subagent** — thin forwarding wrapper around the Antigravity
   CLI; available as `subagent_type: "agy:runner"` for programmatic
@@ -182,6 +186,58 @@ It loads only your user settings and no MCP servers. `claude -p` never asks
 whether to trust a folder, so without that, pointing `--dir` at a repository
 you have not vetted would run its hooks and its `.mcp.json` servers.
 
+### Let agy hand tasks to Claude Code
+
+Every command above has Claude Code driving `agy`. The reverse bridge lets
+`agy` drive: it hands one task to a fresh, headless Claude Code and gets the
+answer back. Install it once from Claude Code:
+
+```text
+/agy:bridge install
+```
+
+That writes an `ask-claude` skill into `agy`'s machine-wide customization
+folder, `~/.gemini/config/skills/ask-claude/`, so every `agy` session is
+offered it. The skill's `scripts/ask-claude` launcher is the fixed path `agy`
+calls. The plugin's own scripts move to a new folder with every release; the
+launcher does not, and it runs whichever plugin version Claude Code has
+installed. On Windows a `scripts/ask-claude.ps1` sits next to it, because `agy`
+runs commands through PowerShell there and `bash` on `PATH` is usually WSL's.
+
+`agy` then runs, for example:
+
+```text
+pwsh -NoProfile -File C:\Users\you\.gemini\config\skills\ask-claude\scripts\ask-claude.ps1 --read-only --dir C:\Data\App 'why does the retry loop deadlock'
+~/.gemini/config/skills/ask-claude/scripts/ask-claude --allow-write --dir ~/src/app 'rename Session.expiry to expiresAt'
+```
+
+- **Read-only by default.** Claude gets `Read`, `Grep` and `Glob` in plan mode
+  and changes nothing.
+- **`--allow-write` is opt-in.** Claude may also edit files under `--dir`, but
+  it still cannot run commands, so `agy` builds and tests afterwards. The run
+  needs an explicit `--dir`, refuses a home folder or drive root, and runs
+  with `--restricted`, which holds the file tools to `--dir` and keeps
+  Claude Code's settings and git files out of reach. Deny rules add the
+  places where agents load hooks and instructions: `.agents/` (where `agy`
+  reads `hooks.json`), `.gemini/`, `.claude/`, `.git/`, `.husky/`, `.vscode/`
+  and `.mcp.json`. A Claude Code build without `--restricted` refuses to
+  write at all.
+- **No repository hooks, either way.** Both modes load only your user
+  settings and no MCP servers, like `/agy:second-opinion`. A write mode makes
+  that matter more: a hook would otherwise run inside the very folder Claude
+  is changing.
+- **You decide what runs unattended.** `agy -p` denies every command no rule
+  allows. `/agy:bridge install` prints two rules for `permissions.allow` in
+  `~/.gemini/antigravity-cli/settings.json`. One ends in `--read-only`, the
+  other in `--allow-write`, and because `agy` matches the start of the
+  command, the read-only rule never covers a write run. Add only the first,
+  and `agy` still asks you before each run that may change files.
+
+`/agy:bridge` on its own reports whether the bridge is installed, which plugin
+version the launcher reaches, and which of the two rules `agy` has. The
+standalone `claude` CLI must be signed in: if calls fail with an OAuth error,
+run `claude` once in a terminal.
+
 ### Pick a specific model
 
 ```text
@@ -305,6 +361,13 @@ The offload commands take a second path through the same wrapper:
                          --setting-sources user --strict-mcp-config
 ```
 
+The reverse bridge runs the other way, and Claude Code is not the caller:
+
+```
+agy  →  ~/.gemini/config/skills/ask-claude/scripts/ask-claude(.ps1)
+     →  agy-run.sh ask-claude  →  claude -p  (read-only, or --allow-write)
+```
+
 - The plugin does **not** ship its own Antigravity runtime — it uses your
   local `agy` binary, your local auth, and your local config.
 - The wrapper script
@@ -371,6 +434,11 @@ to get the clean one.
 | `AGY_LOCK_WAIT_SECONDS` | `600` | Legacy path only: how long to wait for the settings lock. |
 | `AGY_OFFLOAD_BUDGET` | `540` | Seconds for a whole offload, retries included. |
 | `AGY_OFFLOAD_MIN_ATTEMPT` | `120` | Do not start another attempt with less budget left than this. |
+| `AGY_SECOND_OPINION_TIMEOUT` | `540` | Seconds before `/agy:second-opinion` gives up. |
+| `AGY_ASK_CLAUDE_TIMEOUT` | `900` | Seconds before a bridge call from `agy` gives up. `agy` is the caller, so Claude Code's 600-second tool limit does not apply. |
+| `AGY_BRIDGE_DIR` | `~/.gemini/config/skills/ask-claude` | Where `/agy:bridge install` puts the `ask-claude` skill and its launcher. |
+| `AGY_RUN_SH` | unset | Makes the bridge launcher run this `agy-run.sh` instead of the installed plugin's. For development. |
+| `AGY_BRIDGE_BASH` | Git for Windows' `bin\bash.exe` | Windows only: the bash that `ask-claude.ps1` starts. |
 
 ## Development
 
@@ -385,7 +453,9 @@ bash tests/run-tests.sh future       # only tests matching "future"
 The suite covers catalogue discovery and caching, alias resolution (including
 against a *hypothetical future catalogue*, to prove new model generations need
 no code change), user-defined aliases, the legacy settings-patching fallback,
-argument-injection safety, and the image-path hardening.
+argument-injection safety, the image-path hardening, and both directions of
+the Claude Code bridge: the flags each mode hands `claude`, and how the
+launcher finds the installed plugin.
 
 ## FAQ
 
@@ -398,9 +468,10 @@ Standard/Enterprise, or an enterprise GCP project. See the
 ### Does this plugin send data anywhere other than what `agy` sends?
 
 No. The plugin runs `agy` locally over a Bash wrapper. The wrapper only reads
-filesystem paths and your shell environment, and the one network call it can
-cause is `agy models`, which `agy` makes itself. Your prompts go directly to
-Google through `agy`'s normal channels.
+filesystem paths and your shell environment, and apart from `agy` itself it
+starts only your local `claude`, for `/agy:second-opinion` and the reverse
+bridge. Your prompts go to Google through `agy`'s normal channels, and to
+Anthropic through `claude`'s.
 
 ### Which model did my alias actually use?
 

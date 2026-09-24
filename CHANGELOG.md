@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-09-24
+
+### Added
+- **The reverse bridge: `agy` can hand a task to Claude Code.** `/agy:bridge
+  install` writes an `ask-claude` skill into `agy`'s machine-wide
+  customization folder, `~/.gemini/config/skills/ask-claude/`, so every `agy`
+  session is offered it. Its `scripts/ask-claude` launcher is a fixed path
+  that `agy` can call. The plugin's own scripts move to a new folder with
+  every release; the launcher stays put and runs `agy-run.sh ask-claude` from
+  the version recorded in Claude Code's `installed_plugins.json`. If that
+  version predates the bridge, the launcher says so rather than fall back to
+  an older copy in the plugin cache. On Windows, `scripts/ask-claude.ps1`
+  starts Git for Windows' bash, because `agy` runs commands through PowerShell
+  and `bash` on `PATH` is usually WSL's. It hands the arguments over
+  base64-encoded: Git Bash re-reads a Windows command line with its own
+  quoting rules and changes double quotes inside an argument. `/agy:bridge`
+  reports whether the bridge is installed, which plugin version the launcher
+  reaches and which `agy` permission rules exist, and `/agy:bridge uninstall`
+  removes only the files the installer wrote. This ports Direction 2 of the
+  pre-plugin bridge, `ask-claude.ps1`.
+- **`ask-claude` is read-only unless the caller passes `--allow-write`.** By
+  default Claude Code gets `Read`, `Grep` and `Glob` in plan mode.
+  `--allow-write` adds `Edit` and `Write` under `acceptEdits`, never `Bash`.
+  It needs an explicit `--dir`, refuses a home folder or a drive root, and
+  runs with `--restricted`, which holds the file tools to `--dir`. Deny rules
+  keep it out of `.agents/` (where `agy` loads `hooks.json`), `.gemini/`,
+  `.claude/`, `.git/`, `.husky/`, `.vscode/` and `.mcp.json`, so a write run
+  cannot plant a hook that runs later with nobody watching. On a Claude Code
+  build without `--restricted` it refuses to write. Both modes load only the
+  user's own settings and no MCP servers, like `/agy:second-opinion`.
+  `install` prints one `agy` permission rule per mode. `agy` matches the start
+  of a command, so the read-only rule never covers a write run, and `agy`
+  keeps asking before each run that may change files.
+
+### Changed
+- `/agy:second-opinion` and `ask-claude` share one `claude -p` runner, so the
+  settings isolation from 0.7.1 applies to both by construction.
+
 ## [0.7.2] - 2026-09-24
 
 ### Fixed
