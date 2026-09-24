@@ -2140,7 +2140,7 @@ _too_broad_to_write() {
   case "$d" in
     /|/[A-Za-z]|/mnt/[A-Za-z]|/cygdrive/[A-Za-z]|[A-Za-z]:|[A-Za-z]:/) return 0 ;;
   esac
-  home="$(cd "$HOME" 2>/dev/null && pwd || true)"
+  home="$(cd "$HOME" 2>/dev/null && pwd)" || home=""
   if [ -n "$home" ] && { [ "$d" = "$home" ] || [ "$d" = "$(dirname "$home")" ]; }; then
     return 0
   fi
