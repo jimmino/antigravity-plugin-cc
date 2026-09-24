@@ -1,6 +1,6 @@
 {
   "name": "agy",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "description": "Use the Google Antigravity CLI (`agy`) from inside Claude Code — slash commands /agy:setup, /agy:models, /agy:ask, /agy:offload, /agy:fanout, /agy:second-opinion, /agy:delegate, /agy:research, /agy:review, /agy:image, /agy:help. Offload commands run agy read-only and keep the bulk tokens out of your context. Model selection is discovered from `agy models` at runtime, with intent aliases and user-defined aliases, so new model releases need no plugin update. Forked from simplybychris/antigravity-plugin-cc.",
   "author": {
     "name": "jimmino",
