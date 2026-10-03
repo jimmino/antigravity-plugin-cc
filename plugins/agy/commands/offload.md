@@ -80,11 +80,14 @@ The answer is on stdout. One telemetry line comes back on stderr:
 
 - **If the model named is not the one you asked for**, the wrapper fell back on
   a capacity failure and the answer is weaker than requested — say so.
-- **`PARTIAL`** means the turn was cut short by a denied shell command, so the
+- **`PARTIAL`** means the turn was cut short by a denied action (a shell
+  command, a URL fetch, or any other tool the read-only guard refuses), so the
   text is probably the model's opening narration rather than a result. Do not
   treat it as an answer.
-- **`ABORTED`** means the model reached for a shell and headless mode denied
-  it. Rephrase so the answer comes from reading files; do not retry as-is.
+- **`ABORTED`** means the model reached for a shell or a URL and headless mode
+  denied it. Use the rephrase the wrapper prints on the next line: for a
+  shell, make the answer come from reading files; for a URL, answer only from
+  local files and do not open any URL. Do not retry as-is.
 
 Then: **treat the answer as evidence, not verdict.** Open the cited lines and
 confirm them before acting. Assume the list is incomplete — recall is the weak

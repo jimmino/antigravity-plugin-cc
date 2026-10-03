@@ -18,6 +18,7 @@
 #   FAKE_AGY_STATUS          status field (default OK)
 #   FAKE_AGY_IN/FAKE_AGY_OUT token counts
 #   FAKE_AGY_DENIED_COMMAND  1 => report a denied `command` action
+#   FAKE_AGY_DENIED_URL      1 => report a denied `read_url` action (both may be set)
 #   FAKE_AGY_STDERR          text written to stderr before exiting
 #   FAKE_AGY_FAIL_MODELS     comma-separated model ids that fail with a 503
 #   FAKE_AGY_CTX_COPY        path; a context.md in any --add-dir root is copied
@@ -126,10 +127,14 @@ fi
 if [ "$json_out" = "1" ]; then
   resp="${FAKE_AGY_RESPONSE:-${FAKE_AGY_STDOUT:-fake-agy-ok}}"
   if [ "${FAKE_AGY_EMPTY:-0}" = "1" ]; then resp=""; fi
-  denied='[]'
+  denied=''
   if [ "${FAKE_AGY_DENIED_COMMAND:-0}" = "1" ]; then
-    denied='[{"action":"command","display_name":"grep -c ERROR app.log"}]'
+    denied='{"action":"command","display_name":"grep -c ERROR app.log"}'
   fi
+  if [ "${FAKE_AGY_DENIED_URL:-0}" = "1" ]; then
+    denied="${denied:+$denied,}"'{"action":"read_url","display_name":"ReadUrlContent"}'
+  fi
+  denied="[$denied]"
   # python3 rather than sed: the escaping a JSON string literal needs is
   # exactly what a shell heredoc mangles.
   RESP="$resp" STATUS="${FAKE_AGY_STATUS:-OK}" TIN="${FAKE_AGY_IN:-1234}" \

@@ -1299,19 +1299,34 @@ if not isinstance(resp, str):
 with open(dst, "w", encoding="utf-8", newline="") as fh:
     fh.write(resp)
 
+# Headless mode cannot prompt, so any denied action ends the turn, whatever the
+# tool. The kind only picks the wording of the remedy: shell, url, or other.
+# Judged by the action alone: a display name is free text (`curl ...`, a path).
+def kind_of(action):
+    a = action.lower()
+    if "command" in a:
+        return "shell"
+    if "url" in a or "fetch" in a:
+        return "url"
+    return "other"
+
 usage = pick(data, "usage") or {}
 denied = pick(data, "denied_actions", "deniedActions") or []
-names, cmd_denied = [], 0
+names, kinds = [], []
 if isinstance(denied, list):
     for d in denied:
         if isinstance(d, dict):
             action = str(d.get("action", ""))
             shown = str(d.get("display_name", d.get("displayName", d.get("name", ""))))
             names.append(action + "/" + shown if shown else action)
-            if "command" in action.lower():
-                cmd_denied = 1
+            k = kind_of(action or shown)
         elif d:
             names.append(str(d))
+            k = kind_of(str(d))
+        else:
+            continue
+        if k not in kinds:
+            kinds.append(k)
 
 def flat(v):
     return str(v).replace("\n", " ").replace("\r", " ")
@@ -1319,9 +1334,32 @@ def flat(v):
 print("STATUS=" + flat(pick(data, "status") or ""))
 print("IN=" + flat(pick(usage, "input_tokens", "inputTokens", "prompt_tokens") or "?"))
 print("OUT=" + flat(pick(usage, "output_tokens", "outputTokens", "completion_tokens") or "?"))
-print("CMD_DENIED=" + str(cmd_denied))
+print("DENIED_KINDS=" + ",".join(kinds))
 print("DENIED=" + flat(", ".join(names))[:300])
 PY
+}
+
+# Words for a denial, from the comma-separated kinds _offload_parse_json
+# reports. Sets OFFLOAD_DENIED_WHAT ("run a shell command", ...) and
+# OFFLOAD_DENIED_HINT, the rephrase that avoids that tool.
+OFFLOAD_DENIED_WHAT=""
+OFFLOAD_DENIED_HINT=""
+_offload_describe_denial() {
+  local what="" hint="Rephrase so the answer comes from reading files." extra=""
+  case ",$1," in *,shell,*)
+    what="run a shell command"
+    extra="Counting, summing, diffing and regex matching are not offloadable — do them in your own shell."
+    ;;
+  esac
+  case ",$1," in *,url,*)
+    what="${what:+$what and to }fetch a URL"
+    hint="Rephrase: answer only from local files; do not open any URL."
+    extra="${extra:+$extra }If the answer needs online docs, fetch them yourself and pass them in with --stdin."
+    ;;
+  esac
+  if [ -z "$what" ]; then what="use a tool the read-only guard does not allow"; fi
+  OFFLOAD_DENIED_WHAT="$what"
+  OFFLOAD_DENIED_HINT="$hint${extra:+ $extra}"
 }
 
 # One attempt against one model. Raw stdout lands in $outfile, stderr in
@@ -1584,17 +1622,17 @@ ${prompt}"
     : > "$outfile"; : > "$errfile"; : > "$ansfile"
     _offload_attempt "$agy_path" "$dir" "$outfile" "$errfile" "$m" "$effort" "$per" "$full" || true
 
-    local answer="" status="" tin="?" tout="?" cmd_denied=0 denied="" parsed=0 meta="" k v
+    local answer="" status="" tin="?" tout="?" denied_kinds="" denied="" parsed=0 meta="" k v
     if [ "$json_mode" = "1" ]; then
       if meta="$(_offload_parse_json "$outfile" "$ansfile" 2>/dev/null)"; then
         parsed=1
         while IFS='=' read -r k v; do
           case "$k" in
-            STATUS)     status="$v" ;;
-            IN)         tin="$v" ;;
-            OUT)        tout="$v" ;;
-            CMD_DENIED) cmd_denied="$v" ;;
-            DENIED)     denied="$v" ;;
+            STATUS)       status="$v" ;;
+            IN)           tin="$v" ;;
+            OUT)          tout="$v" ;;
+            DENIED_KINDS) denied_kinds="$v" ;;
+            DENIED)       denied="$v" ;;
           esac
         done <<<"$(printf '%s' "$meta" | tr -d '\r')"
         answer="$(cat "$ansfile")"
@@ -1618,8 +1656,10 @@ ${prompt}"
       if [ -n "$primary" ] && [ "$m" != "$primary" ]; then
         echo "[wrapper] note: fell back from $primary to $m on a capacity failure — this answer is weaker than the one asked for." >&2
       fi
-      if [ "$cmd_denied" = "1" ]; then
-        echo "[wrapper] PARTIAL: the turn was cut short by the denial above, so the text below may be opening narration rather than a result. Do not trust it; rephrase so the answer comes from reading files." >&2
+      if [ -n "$denied_kinds" ]; then
+        _offload_describe_denial "$denied_kinds"
+        echo "[wrapper] PARTIAL: the model tried to $OFFLOAD_DENIED_WHAT; the denial above cut the turn short, so the text below may be opening narration rather than a result. Do not trust it." >&2
+        echo "[wrapper] $OFFLOAD_DENIED_HINT" >&2
         rc=1
       else
         rc=0
@@ -1638,12 +1678,22 @@ ${prompt}"
       fi
     fi
 
-    # The commonest failure by far: the model reached for a shell command,
+    # The commonest failure by far: the model reached for a tool it may not
+    # use — a shell command, or a URL to open a library's online docs —
     # headless mode cannot prompt, it was auto-denied, and the turn ended with
-    # nothing — having spent the tokens anyway.
-    if [ "$cmd_denied" = "1" ] || grep -qiE 'command"? permission|auto-denied' <<<"$why"; then
-      echo "[wrapper] $label | $m | ${OFFLOAD_SECONDS}s | ABORTED: the model tried to run a shell command and headless mode auto-denied it." >&2
-      echo "[wrapper] Rephrase so the answer comes from reading files. Counting, summing, diffing and regex matching are not offloadable — do them in your own shell." >&2
+    # nothing, having spent the tokens anyway. Without the JSON envelope, only
+    # agy's stderr says which tool it was.
+    if [ -z "$denied_kinds" ]; then
+      if grep -qiE 'command"? permission' <<<"$why"; then denied_kinds="shell"; fi
+      if grep -qiE 'read_?url|url"? permission' <<<"$why"; then
+        denied_kinds="${denied_kinds:+$denied_kinds,}url"
+      fi
+      if [ -z "$denied_kinds" ] && grep -qiE 'auto-denied' <<<"$why"; then denied_kinds="other"; fi
+    fi
+    if [ -n "$denied_kinds" ]; then
+      _offload_describe_denial "$denied_kinds"
+      echo "[wrapper] $label | $m | ${OFFLOAD_SECONDS}s | ABORTED: the model tried to $OFFLOAD_DENIED_WHAT and headless mode auto-denied it." >&2
+      echo "[wrapper] $OFFLOAD_DENIED_HINT" >&2
       rc=1
       break
     fi
