@@ -55,7 +55,7 @@ JSON
   # Tests export these; without clearing them a knob set by one case
   # silently steers the next one.
   unset FAKE_AGY_RESPONSE FAKE_AGY_EMPTY FAKE_AGY_STATUS FAKE_AGY_IN FAKE_AGY_OUT 2>/dev/null || true
-  unset FAKE_AGY_DENIED_COMMAND FAKE_AGY_STDERR FAKE_AGY_FAIL_MODELS FAKE_AGY_ARGV_APPEND 2>/dev/null || true
+  unset FAKE_AGY_DENIED_COMMAND FAKE_AGY_DENIED_URL FAKE_AGY_STDERR FAKE_AGY_FAIL_MODELS FAKE_AGY_ARGV_APPEND 2>/dev/null || true
   unset FAKE_AGY_CTX_COPY FAKE_CLAUDE_PWD FAKE_TIMEOUT_LOG 2>/dev/null || true
   unset FAKE_CLAUDE_ARGV FAKE_CLAUDE_STDIN FAKE_CLAUDE_RESULT FAKE_CLAUDE_ERROR FAKE_CLAUDE_HELP 2>/dev/null || true
   unset AGY_FORCE_LEGACY_MODEL AGY_QUIET AGY_ALLOW_PREVIEW 2>/dev/null || true
@@ -993,6 +993,39 @@ t_offload_explains_an_auto_denied_shell_command() {
   assert_eq 1 "$RC" "an aborted turn is a failure"
   assert_contains "$ERR" "ABORTED" "the abort must be named"
   assert_contains "$ERR" "not offloadable" "and the remedy stated"
+  assert_not_contains "$ERR" "URL" "a shell denial is not described as a URL fetch"
+}
+
+# Field case: Flash reached for read_url to open a library's online docs.
+t_offload_marks_a_partial_answer_after_a_url_denial() {
+  export FAKE_AGY_DENIED_URL=1 FAKE_AGY_RESPONSE="Let me open the library docs first"
+  run_wrapper offload --dir "$SANDBOX" "how does the library cache tokens"
+  assert_eq 1 "$RC" "a turn cut short by a URL denial is not a success"
+  assert_contains "$ERR" "PARTIAL" "a partial answer must be labelled"
+  assert_contains "$ERR" "fetch a URL" "the denied tool is named"
+  assert_contains "$ERR" "do not open any URL" "and the matching remedy given"
+  assert_not_contains "$ERR" "shell command" "a URL denial is not described as a shell one"
+  assert_contains "$OUT" "Let me open the library docs" "the text still comes back, labelled"
+}
+
+t_offload_explains_an_auto_denied_url_fetch() {
+  export FAKE_AGY_DENIED_URL=1 FAKE_AGY_EMPTY=1
+  run_wrapper offload --dir "$SANDBOX" "how does the library cache tokens"
+  assert_eq 1 "$RC" "an aborted turn is a failure"
+  assert_contains "$ERR" "ABORTED" "the abort must be named"
+  assert_contains "$ERR" "fetch a URL" "the denied tool is named"
+  assert_contains "$ERR" "answer only from local files; do not open any URL" "and the matching remedy given"
+  assert_not_contains "$ERR" "shell command" "a URL denial is not described as a shell one"
+  assert_not_contains "$ERR" "empty response" "not reported as a generic failure"
+}
+
+t_offload_names_both_denied_tools() {
+  export FAKE_AGY_DENIED_COMMAND=1 FAKE_AGY_DENIED_URL=1 FAKE_AGY_EMPTY=1
+  run_wrapper offload --dir "$SANDBOX" "q"
+  assert_eq 1 "$RC" "an aborted turn is a failure"
+  assert_contains "$ERR" "run a shell command and to fetch a URL" "both denied tools are named"
+  assert_contains "$ERR" "not offloadable" "the shell remedy is kept"
+  assert_contains "$ERR" "do not open any URL" "the URL remedy is kept"
 }
 
 t_offload_falls_back_on_a_capacity_failure() {
@@ -1980,6 +2013,9 @@ it "offload: --tier is a synonym for --model"              t_offload_accepts_tie
 it "offload: reports telemetry on stderr"                  t_offload_reports_telemetry
 it "offload: marks a partial answer"                       t_offload_marks_a_partial_answer
 it "offload: explains an auto-denied command"              t_offload_explains_an_auto_denied_shell_command
+it "offload: marks a partial answer after a URL denial"    t_offload_marks_a_partial_answer_after_a_url_denial
+it "offload: explains an auto-denied URL fetch"            t_offload_explains_an_auto_denied_url_fetch
+it "offload: names both denied tools"                      t_offload_names_both_denied_tools
 it "offload: falls back on a capacity failure"             t_offload_falls_back_on_a_capacity_failure
 it "offload: does not retry other failures"                t_offload_does_not_retry_other_failures
 it "offload: stdin becomes a context file"                 t_offload_puts_stdin_in_a_context_file

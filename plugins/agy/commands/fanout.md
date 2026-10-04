@@ -62,7 +62,7 @@ than a path. The wrapper detects that and says so.
 Answers come back grouped under `## <label>  [<model>]`, telemetry per job on
 stderr prefixed `[fanout]`. A job that produced nothing shows
 `(no answer — exit N)` — check its telemetry line for `ABORTED` (the model
-reached for a shell) or a capacity failure.
+reached for a shell or a URL) or a capacity failure.
 
 Verify the findings the same way as a single offload: open the cited lines, and
 grep for anything the sweep claims is absent.

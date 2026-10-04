@@ -54,8 +54,9 @@ model names from memory.
 ## One call
 
 Make one call. The exception: if stderr reports `ABORTED` after a denied shell
-command, rephrase once so the answer comes from reading files, then stop. Do not
-re-run to fish for a better answer.
+command or URL fetch, rephrase once with the hint the wrapper prints (read
+files; for a URL, answer only from local files and do not open any URL), then
+stop. Do not re-run to fish for a better answer.
 
 ## Reporting back
 

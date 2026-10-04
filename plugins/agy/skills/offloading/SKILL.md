@@ -221,12 +221,16 @@ One line per call on stderr:
   capacity failure (503/429). The answer is weaker than requested — say so.
   Timeouts are not retried: a timeout means the task was too big, and the retry
   would get a smaller slice of the budget.
-- **`PARTIAL`** — the turn was cut short by a denied shell command, so the text
-  is probably opening narration. Hand it back labelled as such, never as an
-  answer.
-- **`ABORTED`** — the model reached for a shell and headless mode denied it,
-  spending the tokens anyway. Rephrase so the answer comes from reading files;
-  do not retry as-is.
+- **`PARTIAL`** — the turn was cut short by a denied action, so the text is
+  probably opening narration. Any denial counts: a shell command, a URL fetch
+  (the model trying to open a library's online docs), or any other tool the
+  read-only guard refuses. Hand it back labelled as such, never as an answer.
+- **`ABORTED`** — the model reached for a tool it may not use and headless
+  mode denied it, spending the tokens anyway. The line says which tool, and
+  the next line gives the matching rephrase. Shell: make the answer come from
+  reading files. URL fetch: answer only from local files and do not open any
+  URL; if the answer needs online docs, fetch them yourself and pass them in
+  with `--stdin`. Do not retry as-is.
 
 Make **one call**. The single exception is rephrasing once after an `ABORTED`.
 Do not re-run to fish for a better answer.

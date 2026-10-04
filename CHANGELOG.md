@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **A denied URL fetch now counts as a cut-short turn.** Offloads flagged a
+  turn as `PARTIAL` or `ABORTED` only when the denied action was a shell
+  command. When the model reached for `read_url` to open a library's online
+  docs, opening narration came back with exit 0 and no warning, and an empty
+  answer was reported as a generic `status=..., empty response` failure. Any
+  denied action now triggers `PARTIAL` / `ABORTED`. The message names the tool
+  (shell or URL fetch) and gives the matching rephrase; for a URL: "answer only
+  from local files; do not open any URL".
+
 ## [0.8.0] - 2026-09-24
 
 ### Added
