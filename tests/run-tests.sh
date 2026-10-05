@@ -57,6 +57,11 @@ JSON
   unset FAKE_AGY_RESPONSE FAKE_AGY_EMPTY FAKE_AGY_STATUS FAKE_AGY_IN FAKE_AGY_OUT 2>/dev/null || true
   unset FAKE_AGY_DENIED_COMMAND FAKE_AGY_DENIED_URL FAKE_AGY_STDERR FAKE_AGY_FAIL_MODELS FAKE_AGY_ARGV_APPEND 2>/dev/null || true
   unset FAKE_AGY_CTX_COPY FAKE_CLAUDE_PWD FAKE_TIMEOUT_LOG 2>/dev/null || true
+  unset FAKE_AGY_MAP_COPY FAKE_AGY_FAIL_MESSAGE 2>/dev/null || true
+  # The profile, the config file and the usage ledger all live under the
+  # sandbox, so a developer's own profile never steers a test.
+  unset AGY_PROFILE AGY_CONFIG_FILE AGY_LEDGER AGY_LEDGER_FILE AGY_OFFLOAD_MAP_MAX XDG_STATE_HOME 2>/dev/null || true
+  export AGY_PLUGIN_STATE_DIR="$SANDBOX/state"
   unset FAKE_CLAUDE_ARGV FAKE_CLAUDE_STDIN FAKE_CLAUDE_RESULT FAKE_CLAUDE_ERROR FAKE_CLAUDE_HELP 2>/dev/null || true
   unset AGY_FORCE_LEGACY_MODEL AGY_QUIET AGY_ALLOW_PREVIEW 2>/dev/null || true
   # The bridge installs into HOME and finds the plugin through
@@ -1324,7 +1329,10 @@ t_commands_preapprove_only_their_own_wrapper_call() {
   for f in "$REPO_ROOT"/plugins/agy/commands/*.md; do
     name="$(basename "$f" .md)"
     want="$name"
-    if [ "$name" = "setup" ]; then want="check"; fi
+    case "$name" in
+      setup) want="check" ;;
+      delegate|research) want="ask" ;;
+    esac
     rules="$(sed -n 's/^allowed-tools:[[:space:]]*//p' "$f" | grep -oE 'Bash\([^)]*\)' || true)"
     [ -n "$rules" ] || continue
     n=$((n + 1)); via_bash=0; direct=0
@@ -1923,6 +1931,301 @@ t_check_reports_offload_unavailable_on_old_builds() {
   assert_contains "$OUT" '"offload": false'  "so offloading is unavailable"
 }
 
+# ------------------------------------------------------------ file map ----
+# agy gives a headless run only view_file. The map is how a model finds files.
+t_offload_writes_a_file_map() {
+  mkdir -p "$SANDBOX/proj/sub/deeper"
+  : > "$SANDBOX/proj/top.txt"; : > "$SANDBOX/proj/sub/mid.txt"; : > "$SANDBOX/proj/sub/deeper/low.txt"
+  echo "SECRET=1" > "$SANDBOX/proj/.env"; : > "$SANDBOX/proj/.env.example"
+  export FAKE_AGY_RESPONSE="ok" FAKE_AGY_MAP_COPY="$SANDBOX/map.txt"
+  run_wrapper offload --dir "$SANDBOX/proj" "q"
+  assert_eq 0 "$RC" "offload with a map should succeed"
+  argv_contains "File map:" || fail_msg "the prompt must name the map"
+  argv_contains "files.txt" || fail_msg "the map file must be named"
+  local map; map="$(cat "$SANDBOX/map.txt" 2>/dev/null)"
+  assert_contains "$map" "root: " "the map names its root"
+  assert_contains "$map" "top.txt" "top-level files are listed"
+  assert_contains "$map" "sub/deeper/low.txt" "nested files are listed relative to the root"
+  assert_contains "$map" ".env.example" "the .env template is fine to list"
+  if grep -Fqx '.env' <<<"$map"; then fail_msg "a .env must never be listed"; fi
+}
+
+t_offload_map_follows_git() {
+  mkdir -p "$SANDBOX/repo/build"
+  ( cd "$SANDBOX/repo" && git init -q . \
+    && echo "build/" > .gitignore && : > tracked.txt && : > untracked.txt && : > build/out.bin \
+    && git add .gitignore tracked.txt ) >/dev/null 2>&1
+  export FAKE_AGY_RESPONSE="ok" FAKE_AGY_MAP_COPY="$SANDBOX/map.txt"
+  run_wrapper offload --dir "$SANDBOX/repo" "q"
+  local map; map="$(cat "$SANDBOX/map.txt" 2>/dev/null)"
+  assert_contains "$map" "tracked.txt" "tracked files are listed"
+  assert_contains "$map" "untracked.txt" "new files are listed too"
+  assert_not_contains "$map" "build/out.bin" "ignored files are not"
+}
+
+t_offload_map_keeps_the_shallowest_files() {
+  mkdir -p "$SANDBOX/proj/a/b"
+  : > "$SANDBOX/proj/one.txt"; : > "$SANDBOX/proj/two.txt"; : > "$SANDBOX/proj/a/b/deep.txt"
+  export FAKE_AGY_RESPONSE="ok" FAKE_AGY_MAP_COPY="$SANDBOX/map.txt" AGY_OFFLOAD_MAP_MAX=2
+  run_wrapper offload --dir "$SANDBOX/proj" "q"
+  local map; map="$(cat "$SANDBOX/map.txt" 2>/dev/null)"
+  assert_contains "$map" "one.txt" "shallow files stay"
+  assert_contains "$map" "two.txt" "shallow files stay"
+  assert_not_contains "$map" "deep.txt" "the deepest file goes first"
+  assert_contains "$map" "1 deeper files are not listed" "and the cut is stated"
+}
+
+t_offload_map_survives_a_large_tree() {
+  # Far more names than a pipe buffer holds, and far more than the cap.
+  mkdir -p "$SANDBOX/big"
+  ( cd "$SANDBOX/big" && seq 1 4000 | sed 's/^/a-rather-long-file-name-to-fill-the-pipe-buffer-/' | xargs touch )
+  export FAKE_AGY_RESPONSE="ok" FAKE_AGY_MAP_COPY="$SANDBOX/map.txt" AGY_OFFLOAD_MAP_MAX=10
+  run_wrapper offload --dir "$SANDBOX/big" "q"
+  assert_eq 0 "$RC" "offload over a large tree should succeed"
+  assert_eq 10 "$(grep -c '^a-rather-long' "$SANDBOX/map.txt" 2>/dev/null)" "the map keeps exactly the cap"
+  assert_contains "$(cat "$SANDBOX/map.txt" 2>/dev/null)" "3990 deeper files are not listed" "and states the cut"
+}
+
+t_offload_no_map() {
+  : > "$SANDBOX/a.txt"
+  export FAKE_AGY_RESPONSE="ok"
+  run_wrapper offload --no-map --dir "$SANDBOX" "q"
+  assert_eq 0 "$RC" "offload without a map should succeed"
+  if argv_contains "File map:"; then fail_msg "--no-map must leave the map out"; fi
+}
+
+t_offload_map_sits_beside_the_context_file() {
+  : > "$SANDBOX/a.txt"
+  export FAKE_AGY_RESPONSE="ok" FAKE_AGY_MAP_COPY="$SANDBOX/map.txt" FAKE_AGY_CTX_COPY="$SANDBOX/ctx.md"
+  run_wrapper_stdin "SOME-CONTEXT" offload --stdin --dir "$SANDBOX" "q"
+  assert_contains "$(cat "$SANDBOX/ctx.md" 2>/dev/null)" "SOME-CONTEXT" "the context file still arrives"
+  assert_contains "$(cat "$SANDBOX/map.txt" 2>/dev/null)" "a.txt" "and the map with it"
+  assert_not_contains "$(cat "$SANDBOX/map.txt" 2>/dev/null)" "context.md" "the map does not list the context dir"
+}
+
+# ------------------------------------------------------------- profiles ----
+t_profile_defaults_to_gemini() {
+  run_wrapper profile
+  assert_eq 0 "$RC" "profile show should succeed"
+  assert_contains "$OUT" "Profile: gemini (built-in default)" "gemini is the default"
+  assert_contains "$OUT" "gemini-3.8-flash-high" "offload resolves to balanced"
+}
+
+t_profile_claude_moves_offload_to_claude() {
+  export FAKE_AGY_RESPONSE="ok" AGY_PROFILE=claude
+  run_wrapper offload --dir "$SANDBOX" "q"
+  assert_eq 0 "$RC" "offload should succeed"
+  argv_has "claude-sonnet-5-5-high" || fail_msg "the claude profile offloads to Sonnet"
+  assert_contains "$ERR" "claude profile default for offload" "and says where the choice came from"
+}
+
+t_profile_command_writes_the_config_file() {
+  printf 'default.review = deep\n' > "$AGY_PLUGIN_CONFIG_DIR/config"
+  run_wrapper profile claude
+  assert_eq 0 "$RC" "profile claude should succeed"
+  assert_contains "$(cat "$AGY_PLUGIN_CONFIG_DIR/config")" "profile = claude" "the profile is saved"
+  assert_contains "$(cat "$AGY_PLUGIN_CONFIG_DIR/config")" "default.review = deep" "other settings are kept"
+  export FAKE_AGY_RESPONSE="ok"
+  run_wrapper offload --dir "$SANDBOX" "q"
+  argv_has "claude-sonnet-5-5-high" || fail_msg "the saved profile applies"
+  run_wrapper profile gemini
+  assert_eq 1 "$(grep -c '^profile' "$AGY_PLUGIN_CONFIG_DIR/config")" "switching back replaces the line"
+  run_wrapper offload --dir "$SANDBOX" "q"
+  argv_has "gemini-3.8-flash-high" || fail_msg "and gemini applies again"
+}
+
+t_profile_environment_beats_the_file() {
+  printf 'profile = claude\n' > "$AGY_PLUGIN_CONFIG_DIR/config"
+  export AGY_PROFILE=gemini
+  run_wrapper profile
+  assert_contains "$OUT" "Profile: gemini (AGY_PROFILE)" "AGY_PROFILE wins"
+}
+
+t_profile_rejects_an_unknown_name() {
+  run_wrapper profile openai
+  assert_eq 64 "$RC" "an unknown profile is a usage error"
+  if [ -f "$AGY_PLUGIN_CONFIG_DIR/config" ]; then fail_msg "nothing may be written"; fi
+}
+
+t_profile_unknown_in_the_file_falls_back() {
+  printf 'profile = mistral\n' > "$AGY_PLUGIN_CONFIG_DIR/config"
+  export FAKE_AGY_RESPONSE="ok"
+  run_wrapper offload --dir "$SANDBOX" "q"
+  assert_eq 0 "$RC" "a bad profile does not block the run"
+  assert_contains "$ERR" "unknown profile 'mistral'" "it is reported"
+  argv_has "gemini-3.8-flash-high" || fail_msg "and gemini applies"
+}
+
+t_task_default_beats_the_profile() {
+  printf 'profile = claude\ndefault.offload = opus-low\n' > "$AGY_PLUGIN_CONFIG_DIR/config"
+  export FAKE_AGY_RESPONSE="ok"
+  run_wrapper offload --dir "$SANDBOX" "q"
+  argv_has "claude-opus-5-5-low" || fail_msg "default.offload beats the profile"
+  run_wrapper offload --model fast --dir "$SANDBOX" "q"
+  argv_has "gemini-3.8-flash-low" || fail_msg "and an explicit --model beats both"
+}
+
+t_task_default_that_does_not_resolve_degrades() {
+  printf 'default.offload = haiku\n' > "$AGY_PLUGIN_CONFIG_DIR/config"
+  export FAKE_AGY_RESPONSE="ok"
+  run_wrapper offload --dir "$SANDBOX" "q"
+  assert_eq 0 "$RC" "a default that does not resolve does not block the run"
+  assert_contains "$ERR" "does not resolve" "it is reported"
+  assert_not_contains "$(argv_log)" "--model" "and agy picks its own model"
+}
+
+t_review_uses_opus_under_the_claude_profile() {
+  mkdir -p "$SANDBOX/repo"
+  ( cd "$SANDBOX/repo" && git init -q . \
+    && git config user.email t@e.st && git config user.name test \
+    && echo one > f.txt && git add f.txt && git commit -qm init \
+    && echo two >> f.txt ) >/dev/null 2>&1
+  export FAKE_AGY_RESPONSE="ok" AGY_PROFILE=claude
+  ( cd "$SANDBOX/repo" && bash "$WRAPPER" review ) >/dev/null 2>&1
+  argv_has "claude-opus-5-5-high" || fail_msg "the claude profile reviews with Opus"
+}
+
+t_ask_follows_the_profile() {
+  export AGY_PROFILE=claude
+  run_wrapper ask "q"
+  argv_has "claude-sonnet-5-5-high" || fail_msg "ask uses the claude profile's default"
+  run_wrapper ask --for research "q"
+  argv_has "claude-opus-5-5-high" || fail_msg "--for research picks the research default"
+  export AGY_PROFILE=gemini
+  run_wrapper ask "q"
+  assert_not_contains "$(argv_log)" "--model" "the gemini profile leaves ask to agy's default"
+}
+
+t_ask_rejects_an_unknown_task() {
+  run_wrapper ask --for lunch "q"
+  assert_eq 64 "$RC" "an unknown task is a usage error"
+  run_wrapper offload --for lunch --dir "$SANDBOX" "q"
+  assert_eq 64 "$RC" "for offload as well"
+}
+
+t_claude_falls_back_to_claude_then_gemini() {
+  install_fake_claude
+  export AGY_PROFILE=claude FAKE_AGY_ARGV_APPEND=1 FAKE_AGY_RESPONSE="from opus"
+  export FAKE_AGY_FAIL_MODELS="claude-sonnet-5-5-high"
+  run_wrapper offload --dir "$SANDBOX" "q"
+  assert_eq 0 "$RC" "the fallback answer is an answer"
+  argv_has "claude-opus-5-5-high" || fail_msg "Sonnet falls back to Opus first"
+  if argv_has "gemini-3.8-flash-medium"; then fail_msg "the Gemini chain is not used for Claude"; fi
+  if [ -f "$FAKE_CLAUDE_ARGV" ]; then fail_msg "the claude CLI must never be the fallback"; fi
+  export FAKE_AGY_FAIL_MODELS="claude-sonnet-5-5-high,claude-opus-5-5-high" FAKE_AGY_RESPONSE="from pro"
+  run_wrapper offload --dir "$SANDBOX" "q"
+  assert_contains "$OUT" "from pro" "then Pro"
+  argv_has "gemini-3.1-pro-high" || fail_msg "Pro comes after both Claude families"
+}
+
+t_offload_retries_when_the_quota_runs_out() {
+  export FAKE_AGY_ARGV_APPEND=1 FAKE_AGY_RESPONSE="from the fallback"
+  export FAKE_AGY_FAIL_MODELS="claude-opus-5-5-high" FAKE_AGY_FAIL_MESSAGE="error: you have used up your model quota"
+  run_wrapper offload --model opus --dir "$SANDBOX" "q"
+  assert_eq 0 "$RC" "a quota failure is retried"
+  argv_has "claude-sonnet-5-5-high" || fail_msg "on the next model in the chain"
+}
+
+# ------------------------------------------------- second opinion via agy ----
+t_second_opinion_via_agy_never_calls_claude() {
+  install_fake_claude
+  export FAKE_AGY_RESPONSE="agy opinion"
+  run_wrapper second-opinion --via agy --dir "$SANDBOX" "why does it deadlock"
+  assert_eq 0 "$RC" "the second opinion through agy should succeed"
+  assert_contains "$OUT" "agy opinion" "the answer comes back"
+  argv_has "claude-opus-5-5-high" || fail_msg "the default is Opus at high effort, inside agy"
+  argv_has "plan" || fail_msg "it is held read-only"
+  argv_contains "what would change your mind" || fail_msg "the second-opinion framing is kept"
+  if [ -f "$FAKE_CLAUDE_ARGV" ]; then fail_msg "the claude CLI must not run"; fi
+}
+
+t_second_opinion_via_agy_maps_the_effort() {
+  export FAKE_AGY_RESPONSE="ok"
+  run_wrapper second-opinion --via agy --model sonnet --effort medium --dir "$SANDBOX" "why"
+  argv_has "claude-sonnet-5-5-medium" || fail_msg "--effort picks the agy variant"
+  run_wrapper second-opinion --via agy --effort max --dir "$SANDBOX" "why"
+  argv_has "claude-opus-5-5-high" || fail_msg "an effort agy lacks takes the highest variant"
+  assert_contains "$ERR" "no 'max' variant" "and says so"
+}
+
+t_second_opinion_via_agy_passes_context() {
+  export FAKE_AGY_RESPONSE="ok" FAKE_AGY_CTX_COPY="$SANDBOX/ctx.md"
+  run_wrapper_stdin "ESTABLISHED-FACT" second-opinion --via agy --stdin --dir "$SANDBOX" "why"
+  assert_contains "$(cat "$SANDBOX/ctx.md" 2>/dev/null)" "ESTABLISHED-FACT" "context arrives as a file"
+}
+
+t_second_opinion_follows_the_profile() {
+  install_fake_claude
+  export FAKE_AGY_RESPONSE="ok" AGY_PROFILE=claude
+  run_wrapper second-opinion --dir "$SANDBOX" "why"
+  argv_has "claude-opus-5-5-high" || fail_msg "the claude profile runs it inside agy"
+  if [ -f "$FAKE_CLAUDE_ARGV" ]; then fail_msg "and not through the claude CLI"; fi
+  printf 'second-opinion.via = claude\n' > "$AGY_PLUGIN_CONFIG_DIR/config"
+  run_wrapper second-opinion --dir "$SANDBOX" "why"
+  claude_argv_has "opus" || fail_msg "second-opinion.via = claude beats the profile"
+}
+
+t_second_opinion_rejects_an_unknown_runner() {
+  run_wrapper second-opinion --via gemini --dir "$SANDBOX" "why"
+  assert_eq 64 "$RC" "--via takes claude or agy"
+}
+
+# --------------------------------------------------------------- ledger ----
+t_ledger_records_each_run_without_the_prompt() {
+  export FAKE_AGY_RESPONSE="ok" FAKE_AGY_IN=4321 FAKE_AGY_OUT=99
+  run_wrapper offload --dir "$SANDBOX" --label recon "TOP-SECRET-QUESTION"
+  local ledger="$SANDBOX/state/usage.tsv"
+  [ -f "$ledger" ] || { fail_msg "the run must be recorded"; return 0; }
+  assert_contains "$(cat "$ledger")" "$(printf 'agy\trecon\tgemini-3.8-flash-high')" "runner, label and model are recorded"
+  assert_contains "$(cat "$ledger")" "$(printf '4321\t99\tok')" "with the tokens and the outcome"
+  assert_not_contains "$(cat "$ledger")" "TOP-SECRET-QUESTION" "never the prompt"
+}
+
+t_ledger_records_claude_runs_with_their_cost() {
+  install_fake_claude
+  run_wrapper second-opinion --dir "$SANDBOX" "why"
+  assert_contains "$(cat "$SANDBOX/state/usage.tsv" 2>/dev/null)" "$(printf 'claude\tsecond opinion\topus/high')" "the claude run is recorded"
+  assert_contains "$(cat "$SANDBOX/state/usage.tsv" 2>/dev/null)" "0.0421" "with its cost"
+}
+
+t_ledger_can_be_turned_off() {
+  export FAKE_AGY_RESPONSE="ok" AGY_LEDGER=0
+  run_wrapper offload --dir "$SANDBOX" "q"
+  if [ -e "$SANDBOX/state/usage.tsv" ]; then fail_msg "AGY_LEDGER=0 must write nothing"; fi
+  run_wrapper stats
+  assert_contains "$OUT" "ledger is off" "stats says so"
+}
+
+t_stats_splits_google_and_claude_plans() {
+  install_fake_claude
+  export FAKE_AGY_RESPONSE="ok" FAKE_AGY_IN=1000 FAKE_AGY_OUT=10 AGY_PROFILE=claude
+  run_wrapper offload --dir "$SANDBOX" "q"
+  export AGY_PROFILE=gemini
+  run_wrapper offload --dir "$SANDBOX" "q"
+  run_wrapper second-opinion --via claude --dir "$SANDBOX" "why"
+  run_wrapper stats
+  assert_eq 0 "$RC" "stats should succeed"
+  assert_contains "$OUT" "On the Google plan (agy):         2 runs, 2000 in / 20 out tokens" "agy runs are summed"
+  assert_contains "$OUT" "of which Claude models in agy:  1 runs, 1000 in" "Claude-in-agy is split out"
+  assert_contains "$OUT" "On your Claude plan (claude -p):  1 runs" "claude runs are counted apart"
+  assert_contains "$OUT" '$0.04' "with their cost"
+}
+
+t_stats_rejects_bad_days() {
+  run_wrapper stats --days soon
+  assert_eq 64 "$RC" "--days takes a number"
+}
+
+# ------------------------------------------------- plugin shape: agents ----
+t_agents_run_on_the_cheapest_claude_model() {
+  # A subagent that only forwards one wrapper call spends the user's Claude
+  # plan for nothing. Haiku is enough to make the call.
+  local f
+  for f in "$REPO_ROOT"/plugins/agy/agents/*.md; do
+    grep -qx 'model: haiku' "$f" || fail_msg "$(basename "$f") should run on haiku"
+  done
+}
+
 # =================================================================== run ===
 printf '\n%s\n' "agy-run.sh test suite"
 
@@ -2135,6 +2438,38 @@ it "regress: review never names an untracked .env"         t_review_never_names_
 it "regress: fanout prompt that looks like a flag"         t_fanout_prompt_that_looks_like_a_flag
 it "regress: second-opinion runs in --dir"                 t_second_opinion_runs_in_the_target_dir
 it "regress: legacy sed fallback escapes / and &"          t_legacy_sed_fallback_escapes_the_model_name
+
+printf '\n%s\n' "claude on the google plan"
+it "map: offload writes a file map"                         t_offload_writes_a_file_map
+it "map: follows git, leaves ignored files out"             t_offload_map_follows_git
+it "map: over the cap, keeps the shallowest files"          t_offload_map_keeps_the_shallowest_files
+it "map: survives a tree bigger than a pipe buffer"         t_offload_map_survives_a_large_tree
+it "map: --no-map leaves it out"                            t_offload_no_map
+it "map: sits beside the context file"                      t_offload_map_sits_beside_the_context_file
+it "profile: gemini is the default"                         t_profile_defaults_to_gemini
+it "profile: claude moves offload to Claude"                t_profile_claude_moves_offload_to_claude
+it "profile: the command writes the config file"            t_profile_command_writes_the_config_file
+it "profile: AGY_PROFILE beats the file"                    t_profile_environment_beats_the_file
+it "profile: an unknown name is refused"                    t_profile_rejects_an_unknown_name
+it "profile: an unknown name in the file falls back"        t_profile_unknown_in_the_file_falls_back
+it "profile: default.<task> beats the profile"              t_task_default_beats_the_profile
+it "profile: a default that does not resolve degrades"      t_task_default_that_does_not_resolve_degrades
+it "profile: review uses Opus under claude"                 t_review_uses_opus_under_the_claude_profile
+it "profile: ask follows the profile and --for"             t_ask_follows_the_profile
+it "profile: --for rejects an unknown task"                 t_ask_rejects_an_unknown_task
+it "fallback: Claude tries Claude, then Pro, never claude"  t_claude_falls_back_to_claude_then_gemini
+it "fallback: a quota error is retried"                     t_offload_retries_when_the_quota_runs_out
+it "second-opinion: --via agy never calls claude"           t_second_opinion_via_agy_never_calls_claude
+it "second-opinion: --via agy maps the effort"              t_second_opinion_via_agy_maps_the_effort
+it "second-opinion: --via agy passes context"               t_second_opinion_via_agy_passes_context
+it "second-opinion: follows the profile and config"         t_second_opinion_follows_the_profile
+it "second-opinion: --via rejects an unknown runner"        t_second_opinion_rejects_an_unknown_runner
+it "ledger: records a run, never the prompt"                t_ledger_records_each_run_without_the_prompt
+it "ledger: records claude runs with their cost"            t_ledger_records_claude_runs_with_their_cost
+it "ledger: AGY_LEDGER=0 turns it off"                      t_ledger_can_be_turned_off
+it "stats: splits the Google and Claude plans"              t_stats_splits_google_and_claude_plans
+it "stats: rejects a bad --days"                            t_stats_rejects_bad_days
+it "shape: agents run on haiku"                             t_agents_run_on_the_cheapest_claude_model
 
 printf '\n'
 if [ "$FAIL" -eq 0 ]; then

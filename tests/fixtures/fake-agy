@@ -23,6 +23,8 @@
 #   FAKE_AGY_FAIL_MODELS     comma-separated model ids that fail with a 503
 #   FAKE_AGY_CTX_COPY        path; a context.md in any --add-dir root is copied
 #                            here (the wrapper deletes the original on exit)
+#   FAKE_AGY_MAP_COPY        path; the same for the file map, files.txt
+#   FAKE_AGY_FAIL_MESSAGE    the error a FAKE_AGY_FAIL_MODELS model prints
 set -u
 
 mode="${FAKE_AGY_MODE:-new}"
@@ -100,6 +102,14 @@ if [ -n "${FAKE_AGY_CTX_COPY:-}" ]; then
   done
 fi
 
+if [ -n "${FAKE_AGY_MAP_COPY:-}" ]; then
+  prev=""
+  for a in "$@"; do
+    if [ "$prev" = "--add-dir" ] && [ -f "$a/files.txt" ]; then cp "$a/files.txt" "$FAKE_AGY_MAP_COPY"; fi
+    prev="$a"
+  done
+fi
+
 # Which model and output format did the wrapper ask for?
 json_out=0; model=""; prev=""
 for a in "$@"; do
@@ -115,7 +125,7 @@ if [ -n "${FAKE_AGY_STDERR:-}" ]; then printf '%s\n' "$FAKE_AGY_STDERR" >&2; fi
 if [ -n "${FAKE_AGY_FAIL_MODELS:-}" ] && [ -n "$model" ]; then
 case ",${FAKE_AGY_FAIL_MODELS}," in
   *",${model},"*)
-    echo "error: 503 UNAVAILABLE: model is overloaded, no capacity" >&2
+    echo "${FAKE_AGY_FAIL_MESSAGE:-error: 503 UNAVAILABLE: model is overloaded, no capacity}" >&2
     if [ "$json_out" = "1" ]; then
       printf '{"status":"ERROR","response":"","usage":{"input_tokens":0,"output_tokens":0},"denied_actions":[]}\n'
     fi

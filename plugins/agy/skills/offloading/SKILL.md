@@ -92,10 +92,18 @@ Frame security questions as correctness — which inputs reach a wrong result,
 which requests one user can make against another user's data. Same findings, no
 refusal.
 
-**For a genuine second opinion, use `/agy:second-opinion`, not a tier.** Claude
-models selected *inside* `agy` are the worst option: they reach for a shell
-immediately, headless auto-denies it, and you get the opening narration back
-dressed up as an answer.
+**Claude models inside `agy` (`sonnet`, `opus`, the `claude` profile) spend the
+Google plan's quota, not the user's Claude plan.** In a headless run `agy` 1.2.17
+gives every model one file tool, `view_file`, and nothing that lists or
+searches. Without a map, Sonnet asked "which files mention X" said it had no
+listing tool and guessed file names from the ones it had read. With the file
+map the wrapper now writes, the same question found hits across five subfolders
+(64 s, 193 k in). Keep the map unless the prompt names every file.
+
+**For a second opinion, use `/agy:second-opinion`, not a tier.** `--via claude`
+runs a real Claude Code that can search, on the user's Claude plan; `--via agy`
+runs Opus inside `agy`, on the Google plan. The profile picks one when neither
+is given.
 
 ## Writing the prompt
 

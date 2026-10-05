@@ -1,8 +1,10 @@
 # agy — Antigravity CLI plugin for Claude Code
 
 Use Google's [Antigravity CLI (`agy`)](https://antigravity.google/) from
-inside Claude Code. Delegate tasks to the `agy:runner` subagent, run quick
-prompts, or get a second-opinion code review — without leaving your editor.
+inside Claude Code. Delegate tasks, run quick prompts, offload bulk reads, or
+get a second-opinion code review — without leaving your editor. With the
+`claude` profile, that work runs on the Claude models your Google plan offers
+inside `agy`, so it spends Google's quota instead of your Claude subscription.
 
 This plugin is for Claude Code users who already use (or want to start using)
 Antigravity and want a smooth way to call it from the workflow they already
@@ -18,10 +20,10 @@ just Bash and `agy`.
 - **`/agy:ask [--model <m>] [--effort <e>] <prompt>`** — one-shot prompt
   through `agy -p`; returns the raw response.
 - **`/agy:delegate [--background] [--model <m>] [--effort <e>] <task>`** — hand
-  a task to the `agy:runner` subagent. `--background` for long jobs.
+  a task to `agy`. `--background` for long jobs.
 - **`/agy:research [--background] [--model <m>] [--effort <e>] <topic>`** —
   delegate a deep-research investigation; wraps the topic in a structured
-  prompt and routes through `agy:runner`.
+  prompt.
 - **`/agy:image <description>`** — generate an image with `agy`'s built-in
   `generate_image` tool (Imagen under the hood). Optional `--name` and
   `--output`.
@@ -33,9 +35,14 @@ just Bash and `agy`.
   piped in behind `--stdin`.
 - **`/agy:fanout (--jobs <f> | --prompt <t>...) [--throttle N]`** — several
   offload jobs at once. Each call takes 1-3 minutes, so concurrency is the win.
-- **`/agy:second-opinion [--model opus|sonnet|haiku] <question>`** — an
-  independent answer from a fresh Claude Code running read-only in plan mode,
-  for when you want a view that has not seen your conversation.
+- **`/agy:second-opinion [--via claude|agy] [--model opus|sonnet|haiku] <question>`**
+  — an independent, read-only answer from Claude that has not seen your
+  conversation: a fresh Claude Code (your Claude plan), or a Claude model
+  inside `agy` (the Google plan).
+- **`/agy:profile [show|claude|gemini]`** — which model each command uses when
+  you give no `--model`. `claude` moves the work onto `agy`'s Claude models.
+- **`/agy:stats [--days N | --all]`** — runs and tokens per model, split
+  between the Google plan and your Claude plan.
 - **`/agy:bridge [status|install|uninstall]`** — the other direction: `agy`
   drives and Claude Code does the work. Installs a launcher at a fixed path
   that `agy` can call, and an `ask-claude` skill that tells `agy` how.
@@ -95,7 +102,7 @@ terminal to complete OAuth — or export `ANTIGRAVITY_API_KEY`.
 
 Returns Antigravity's response verbatim.
 
-### Delegate a task to the `agy:runner` subagent
+### Delegate a task
 
 ```text
 /agy:delegate refactor the SQL queries in src/db/queries.go to use prepared statements
@@ -114,8 +121,8 @@ You can also delegate by talking to Claude:
 Ask agy to look at this file and suggest a simpler design.
 ```
 
-The plugin's selection rules route through the `agy:runner` subagent
-automatically.
+Claude can route that through the `agy:runner` subagent on its own. The
+subagent runs on Haiku, because all it does is make one wrapper call.
 
 ### Review the current diff
 
@@ -185,6 +192,65 @@ what you ruled out — not your current best guess — then compare.
 It loads only your user settings and no MCP servers. `claude -p` never asks
 whether to trust a folder, so without that, pointing `--dir` at a repository
 you have not vetted would run its hooks and its `.mcp.json` servers.
+
+Through `agy` instead, it spends none of your Claude plan:
+
+```text
+/agy:second-opinion --via agy why does the retry loop in src/sync.ts deadlock
+```
+
+That runs Opus inside `agy` on the read-only offload path. It has only a file
+viewer, not a search tool, so it reads more to find the same thing.
+
+### Run Claude on the Google plan
+
+Google AI Pro and Ultra let `agy` run Claude models (Opus and Sonnet, in Low,
+Medium and High variants). The `claude` profile points the plugin's work at
+them, so it spends the Google plan's quota instead of your Claude
+subscription:
+
+```text
+/agy:profile claude
+```
+
+| Command | `gemini` profile (default) | `claude` profile |
+|---|---|---|
+| `/agy:offload`, `/agy:fanout` | `balanced` (Flash) | `sonnet` inside `agy` |
+| `/agy:review` | `balanced` | `opus` inside `agy` |
+| `/agy:ask`, `/agy:delegate` | `agy`'s own default | `sonnet` inside `agy` |
+| `/agy:research` | `agy`'s own default | `opus` inside `agy` |
+| `/agy:second-opinion` | `opus` through `claude -p` | `opus` inside `agy` |
+
+An explicit `--model` always wins. Per-task overrides go in
+`~/.config/agy-plugin/config` (see [`examples/config`](examples/config)):
+
+```text
+profile = claude
+default.offload = sonnet-medium
+second-opinion.via = claude
+```
+
+When a Claude model runs out of capacity or quota, the offload path tries the
+other Claude family, then Pro, then Flash, and says so. It never falls back to
+the `claude` CLI. `/agy:stats` shows how the work split between the two plans.
+
+What it cannot do:
+
+- **This Claude Code session stays on your Claude plan.** Claude Code signs in
+  only to Anthropic. Each prompt it writes and each answer it reads still
+  costs Claude tokens; the bulk reading moves to Google.
+- **A Claude model inside `agy` is the model, not Claude Code.** It has no
+  CLAUDE.md, skills, hooks or subagents. In a headless run, `agy` gives it one
+  file tool, `view_file`, and nothing that lists or searches, so the wrapper
+  hands it a map of the workspace instead.
+- **Do not route Claude Code through `agy`'s sign-in.** A proxy that reuses
+  `agy`'s credentials as an Anthropic API endpoint is very likely against
+  Google's terms, and can get the account suspended. This plugin only runs
+  the `agy` CLI as Google ships it.
+
+The biggest saving is to swap roles: use the `agy` TUI with Opus as your daily
+driver, and call Claude Code through `/agy:bridge` only for work that needs
+its own tools.
 
 ### Let agy hand tasks to Claude Code
 
@@ -435,6 +501,11 @@ to get the clean one.
 | `AGY_MODELS_CACHE_TTL` | `3600` | Seconds before the cached model catalogue is refetched. |
 | `AGY_PLUGIN_CACHE_DIR` | `${XDG_CACHE_HOME:-~/.cache}/agy-plugin` | Where the catalogue cache lives. |
 | `AGY_ALIASES_FILE` | `${XDG_CONFIG_HOME:-~/.config}/agy-plugin/aliases.conf` | Your alias definitions. |
+| `AGY_CONFIG_FILE` | `${XDG_CONFIG_HOME:-~/.config}/agy-plugin/config` | The profile, `default.<task>` overrides and `second-opinion.via`. |
+| `AGY_PROFILE` | unset | `claude` or `gemini` for this shell; beats the config file. |
+| `AGY_LEDGER` | unset | `0` turns off the usage ledger. |
+| `AGY_LEDGER_FILE` | `${XDG_STATE_HOME:-~/.local/state}/agy-plugin/usage.tsv` | One line per run: time, model, seconds, tokens, outcome. Never a prompt or an answer. |
+| `AGY_OFFLOAD_MAP_MAX` | `3000` | Most files the offload file map lists per workspace root; the deepest go first. |
 | `AGY_QUIET` | unset | `1` silences the `[wrapper] model: …` resolution line. |
 | `AGY_ALLOW_PREVIEW` | unset | `1` lets built-in aliases resolve to preview and experimental models. |
 | `AGY_LOCK_WAIT_SECONDS` | `600` | Legacy path only: how long to wait for the settings lock. |
@@ -490,11 +561,12 @@ than a fixed version — without it, "newest Pro" would be unauditable.
 Yes — the plugin uses your local install. Running `agy` directly in a
 terminal keeps working exactly as before.
 
-### Why a subagent instead of just a slash command?
+### Why do `/agy:delegate` and `/agy:research` not use a subagent?
 
-Subagents in Claude Code can run in the background and report back when
-finished. That is the workflow you want when you "hand this off to another
-model and keep working" — which is the whole point of delegating to `agy`.
+They did, up to 0.8.0. A subagent that only forwards one wrapper call spends
+Claude tokens for nothing, and a Bash call with `run_in_background` reports
+back when it finishes just as well. The `agy:runner` and `agy:offload`
+subagents remain for Claude to pick on its own, and they run on Haiku.
 
 ## Inspiration
 

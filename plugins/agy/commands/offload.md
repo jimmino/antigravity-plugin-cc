@@ -52,8 +52,10 @@ git --no-pager diff HEAD -- <paths> |
 
 Flags, all before the prompt:
 
-- `--model <alias|id>` (`--tier` is a synonym) — defaults to `balanced`, the
-  workhorse. `fast` for wide shallow sweeps, `deep` for a bounded read over a
+- `--model <alias|id>` (`--tier` is a synonym) — without it the profile
+  decides (`/agy:profile`): `balanced`, the workhorse, under `gemini`;
+  `sonnet` inside agy under `claude`, which spends the Google plan's quota
+  instead of the user's Claude plan. `fast` for wide shallow sweeps, `deep` for a bounded read over a
   file list you name explicitly. Aliases resolve against the live catalogue;
   run `/agy:models` rather than reciting names.
 - `--dir <path>` — the workspace root. Defaults to the project directory.
@@ -64,6 +66,10 @@ Flags, all before the prompt:
 - `--budget <seconds>` — total across all attempts (default 540, under Claude
   Code's 600s tool kill). Set the Bash tool timeout to 600000 ms.
 - `--effort low|medium|high`, `--timeout <duration>`, `--no-fallback`, `--raw`.
+- `--no-map` — leave out the file map. agy gives a headless run only a file
+  viewer, with no tool that lists or searches, so by default the wrapper writes
+  a map of the workspace (git's file list; never a `.env`) for the model to
+  read. Keep it unless you name every file in the prompt.
 
 After the prompt, only `--sandbox` is accepted. Any other agy flag there is
 refused, because one such as `--mode` would switch off the read-only guard.
