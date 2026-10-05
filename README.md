@@ -260,8 +260,8 @@ what you actually have:
 
 | Kind | Examples | Behaviour |
 |---|---|---|
-| **Intent alias** | `fast`, `balanced`, `deep`, `flash`, `pro`, `sonnet`, `opus`, `haiku`, `gpt-oss`, `gemini`, `claude` | Names a *family and effort*, never a version. Resolves to the newest matching model in the live catalogue, so a new Gemini or Claude generation is picked up with no plugin update. |
-| **Exact id or display name** | `gemini-3.1-pro-high`, `"Claude Opus 4.6 (Thinking)"` | Pins one specific model. Case-insensitive. |
+| **Intent alias** | `fast`, `balanced`, `deep`, `flash`, `pro`, `sonnet`, `opus`, `opus-low`, `sonnet-medium`, `gpt-oss`, `gemini`, `claude` | Names a *family and effort*, never a version. Resolves to the newest matching model in the live catalogue, so a new Gemini or Claude generation is picked up with no plugin update. |
+| **Exact id or display name** | `gemini-3.1-pro-high`, `"Claude Opus 5.5 (High)"` | Pins one specific model. Case-insensitive. |
 | **Anything else** | `my-private-endpoint` | Forwarded to `agy` untouched, so custom models defined in your `agy` settings keep working. `agy` validates it and lists the valid names if it is wrong. |
 
 The three tier aliases are the ones worth learning:
@@ -269,6 +269,12 @@ The three tier aliases are the ones worth learning:
 - `fast` — newest Flash at low effort. Wide, shallow sweeps.
 - `balanced` — newest Flash at high effort. The workhorse.
 - `deep` — newest Pro at high effort. Bounded, careful reads.
+
+Claude models in agy come in Low, Medium and High effort variants. `opus` and
+`sonnet` take the highest effort offered; `opus-low`, `opus-medium`,
+`opus-high` and the matching `sonnet-*` aliases pick one. `haiku` resolves
+only if your plan offers a Claude Haiku, which the Google AI Pro catalogue
+currently does not.
 
 `--effort low|medium|high` picks a reasoning-effort variant independently and
 is passed straight to `agy --effort`.

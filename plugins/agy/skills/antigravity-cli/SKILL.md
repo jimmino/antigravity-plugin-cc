@@ -49,8 +49,11 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" models
 1. **Intent aliases**, which name a family and effort rather than a version
    and therefore follow new releases automatically:
    `fast`, `balanced`, `deep`, `flash-low`, `flash-medium`, `flash`,
-   `pro-low`, `pro-medium`, `pro`, `sonnet`, `opus`, `haiku`, `gpt-oss`,
-   `gemini`, `claude`. All case-insensitive.
+   `pro-low`, `pro-medium`, `pro`, `sonnet`, `sonnet-low`, `sonnet-medium`,
+   `sonnet-high`, `opus`, `opus-low`, `opus-medium`, `opus-high`, `haiku`,
+   `gpt-oss`, `gemini`, `claude`. All case-insensitive. An alias whose family
+   or effort the live catalogue lacks (`haiku`, `pro-medium` today) fails with
+   the list of models that do exist.
 2. **Exact ids or display names** from the catalogue above, when a specific
    version must be pinned.
 3. **Anything else**, forwarded to `agy` verbatim — this is how custom models

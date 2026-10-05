@@ -350,8 +350,9 @@ _alias_candidate_ids() {
 # FAMILY_ID, plus FAMILY_NOTE when the pick needs explaining on stderr.
 # Returns 1 when the family is absent, 3 when only previews match, and 2 when
 # an effort was asked for but the newest models in the family carry variants
-# this wrapper cannot read as low/medium/high — guessing there would hand
-# `fast` and `balanced` the same model. FAMILY_CANDIDATES lists the models
+# this wrapper cannot read as low/medium/high, or lack that one effort (Pro
+# ships High and Low only) — guessing there would hand `fast` and `balanced`
+# the same model. FAMILY_CANDIDATES lists the models
 # behind a 2 or a 3.
 FAMILY_ID=""
 FAMILY_NOTE=""
@@ -365,6 +366,14 @@ _resolve_family() {
     FAMILY_CANDIDATES="$(catalogue_ids | grep -iE -- "$family" || true)"
     [ -n "$FAMILY_CANDIDATES" ] && return 3
     return 1
+  fi
+
+  # `claude` means the newest Claude. When Opus and Sonnet share that version,
+  # the id sort alone would hand it to Sonnet, so Opus wins the tie.
+  if [ "$family" = "claude" ]; then
+    local opus
+    opus="$(printf '%s\n' "$ids" | _newest_version_ids | grep -i -- 'opus' || true)"
+    [ -z "$opus" ] || ids="$opus"
   fi
 
   if [ -z "$effort" ]; then
@@ -462,7 +471,13 @@ builtin_alias_spec() {
     pro-medium|pro-med)       echo "pro|medium" ;;
     pro|pro-high)             echo "pro|high" ;;
     sonnet|claude-sonnet)     echo "sonnet|" ;;
+    sonnet-low)               echo "sonnet|low" ;;
+    sonnet-medium|sonnet-med) echo "sonnet|medium" ;;
+    sonnet-high)              echo "sonnet|high" ;;
     opus|claude-opus)         echo "opus|" ;;
+    opus-low)                 echo "opus|low" ;;
+    opus-medium|opus-med)     echo "opus|medium" ;;
+    opus-high)                echo "opus|high" ;;
     haiku|claude-haiku)       echo "haiku|" ;;
     gpt-oss|gpt-oss-120b)     echo "gpt-oss|" ;;
     gemini)                   echo "gemini|" ;;
@@ -482,12 +497,18 @@ flash (flash-high)	newest Flash, high effort
 pro-low	newest Pro, low effort
 pro-medium (pro-med)	newest Pro, medium effort
 pro (pro-high)	newest Pro, high effort
-sonnet (claude-sonnet)	newest Claude Sonnet
-opus (claude-opus)	newest Claude Opus
-haiku (claude-haiku)	newest Claude Haiku
+sonnet (claude-sonnet)	newest Claude Sonnet, highest effort offered
+sonnet-low	newest Claude Sonnet, low effort
+sonnet-medium (sonnet-med)	newest Claude Sonnet, medium effort
+sonnet-high	newest Claude Sonnet, high effort
+opus (claude-opus)	newest Claude Opus, highest effort offered
+opus-low	newest Claude Opus, low effort
+opus-medium (opus-med)	newest Claude Opus, medium effort
+opus-high	newest Claude Opus, high effort
+haiku (claude-haiku)	newest Claude Haiku, if your plan offers one
 gpt-oss (gpt-oss-120b)	newest GPT-OSS
 gemini	newest Gemini of any family
-claude	newest Claude of any family
+claude	newest Claude of any family, Opus on a tie
 ALIASES
 }
 
@@ -555,7 +576,11 @@ resolve_model() {
     fi
     if [ "$rc" -eq 2 ]; then
       echo "error: alias '$input' asks for $effort-effort $family, but the newest $family models" >&2
-      echo "       do not name their variants low/medium/high, so the wrapper will not guess:" >&2
+      if grep -qiE -- '-(low|medium|high)$' <<<"$FAMILY_CANDIDATES"; then
+        echo "       have no '$effort' variant, so the wrapper will not guess:" >&2
+      else
+        echo "       do not name their variants low/medium/high, so the wrapper will not guess:" >&2
+      fi
       while IFS= read -r c; do echo "         $c"; done <<<"$FAMILY_CANDIDATES" >&2
       echo "       Pass one of them with --model, or pin '$input' to one in $AGY_ALIASES_FILE." >&2
       exit 64
