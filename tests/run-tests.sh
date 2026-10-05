@@ -36,7 +36,7 @@ setup_sandbox() {
   chmod +x "$SANDBOX/bin/agy"
   cat > "$SANDBOX/home/.gemini/antigravity-cli/settings.json" <<'JSON'
 {
-  "model": "Gemini 3.1 Pro (High)",
+  "model": "Gemini 3.8 Flash (High)",
   "allowNonWorkspaceAccess": true
 }
 JSON
@@ -170,8 +170,8 @@ t_catalogue_parses_tsv() {
   run_wrapper models --ids
   assert_eq 0 "$RC" "models --ids should succeed"
   assert_contains "$OUT" "gemini-3.8-flash-high" "catalogue should list current ids"
-  assert_contains "$OUT" "claude-opus-4-6-thinking" "catalogue should list claude ids"
-  assert_eq 14 "$(printf '%s\n' "$OUT" | grep -c .)" "all 14 fixture models parsed"
+  assert_contains "$OUT" "claude-opus-5-5-high" "catalogue should list claude ids"
+  assert_eq 18 "$(printf '%s\n' "$OUT" | grep -c .)" "all 18 fixture models parsed"
 }
 
 t_catalogue_strips_spinner_noise() {
@@ -216,7 +216,7 @@ t_catalogue_prefers_json_when_supported() {
   run_wrapper models --ids
   assert_eq 0 "$RC" "json catalogue path should work"
   assert_contains "$OUT" "gemini-3.8-flash-high" "json path yields same ids"
-  assert_eq 14 "$(printf '%s\n' "$OUT" | grep -c .)" "json path parses every model"
+  assert_eq 18 "$(printf '%s\n' "$OUT" | grep -c .)" "json path parses every model"
 }
 
 t_catalogue_absent_reports_clearly() {
@@ -266,12 +266,28 @@ t_alias_pro_low() {
 
 t_alias_opus() {
   run_wrapper ask --model opus "hi"
-  argv_has "claude-opus-4-6-thinking" || fail_msg "opus => the Claude Opus entry"
+  argv_has "claude-opus-5-5-high" || fail_msg "opus => newest Claude Opus at its highest effort; argv: $(argv_log | tr '\n' ' ')"
 }
 
 t_alias_sonnet() {
   run_wrapper ask --model sonnet "hi"
-  argv_has "claude-sonnet-4-6" || fail_msg "sonnet => the Claude Sonnet entry"
+  argv_has "claude-sonnet-5-5-high" || fail_msg "sonnet => newest Claude Sonnet at its highest effort; argv: $(argv_log | tr '\n' ' ')"
+}
+
+t_alias_claude_effort_variants() {
+  run_wrapper ask --model opus-low "hi"
+  argv_has "claude-opus-5-5-low" || fail_msg "opus-low => low-effort Opus; argv: $(argv_log | tr '\n' ' ')"
+  run_wrapper ask --model sonnet-med "hi"
+  argv_has "claude-sonnet-5-5-medium" || fail_msg "sonnet-med => medium-effort Sonnet; argv: $(argv_log | tr '\n' ' ')"
+}
+
+t_alias_missing_effort_names_the_variants() {
+  # Pro ships High and Low only. Asking for medium must fail, and must not
+  # claim the variants are unnamed when they plainly say -high and -low.
+  run_wrapper ask --model pro-medium "hi"
+  assert_eq 64 "$RC" "a missing effort variant is a usage error"
+  assert_contains "$ERR" "have no 'medium' variant" "the error says which effort is missing"
+  assert_contains "$ERR" "gemini-3.1-pro-low" "the error lists the variants that do exist"
 }
 
 t_alias_gpt_oss() {
@@ -357,6 +373,20 @@ t_future_claude_picks_newest_version_not_name() {
   export FAKE_AGY_CATALOG="$SANDBOX/claude.tsv"
   run_wrapper ask --model claude "hi"
   argv_has "claude-opus-5-thinking" || fail_msg "claude => the newest Claude version; argv: $(argv_log | tr '\n' ' ')"
+}
+
+t_alias_claude_prefers_opus_on_tie() {
+  # Opus 5.5 and Sonnet 5.5 share a version; the id sort alone picked Sonnet.
+  run_wrapper ask --model claude "hi"
+  argv_has "claude-opus-5-5-high" || fail_msg "claude => Opus when versions tie; argv: $(argv_log | tr '\n' ' ')"
+}
+
+t_future_claude_newer_sonnet_beats_older_opus() {
+  # The Opus preference only breaks ties; it must not pin `claude` to an old Opus.
+  use_catalog 'claude-opus-5-5-high|Claude Opus 5.5 (High)' \
+              'claude-sonnet-5-6-high|Claude Sonnet 5.6 (High)'
+  run_wrapper ask --model claude "hi"
+  argv_has "claude-sonnet-5-6-high" || fail_msg "claude => the newest version even if it is Sonnet; argv: $(argv_log | tr '\n' ' ')"
 }
 
 t_future_gemini_prefers_high_effort_on_a_tie() {
@@ -670,9 +700,9 @@ t_legacy_path_patches_and_restores_settings() {
   local before; before="$(cat "$AGY_SETTINGS_FILE")"
   run_wrapper ask --model opus "hi"
   assert_eq 0 "$RC" "legacy path should succeed"
-  assert_contains "$OUT" "SETTINGS_MODEL_DURING_RUN=Claude Opus 4.6 (Thinking)" \
+  assert_contains "$OUT" "SETTINGS_MODEL_DURING_RUN=Claude Opus 5.5 (High)" \
     "settings.json must hold the requested model while agy runs"
-  assert_eq "Gemini 3.1 Pro (High)" "$(settings_model)" "the original model must be restored afterwards"
+  assert_eq "Gemini 3.8 Flash (High)" "$(settings_model)" "the original model must be restored afterwards"
   assert_contains "$ERR" "falling back to temporary settings.json patching" "the fallback is announced"
 }
 
@@ -681,7 +711,7 @@ t_legacy_path_restores_after_failure() {
   export FAKE_AGY_EXIT=7
   run_wrapper ask --model opus "hi"
   assert_eq 7 "$RC" "the failure code should propagate"
-  assert_eq "Gemini 3.1 Pro (High)" "$(settings_model)" "settings must be restored even when agy fails"
+  assert_eq "Gemini 3.8 Flash (High)" "$(settings_model)" "settings must be restored even when agy fails"
   if [ -f "$AGY_SETTINGS_FILE.agy-plugin.bak" ]; then fail_msg "backup file should not be left behind"; fi
   if [ -d "$AGY_HOME/.agy-plugin.lock" ]; then fail_msg "lock directory should be released"; fi
 }
@@ -690,9 +720,9 @@ t_legacy_path_detected_from_help() {
   export FAKE_AGY_MODE="old-no-model"
   export FAKE_AGY_SETTINGS="$AGY_SETTINGS_FILE"
   # No catalogue on this build either, so pin an explicit display name.
-  run_wrapper ask --model "Claude Opus 4.6 (Thinking)" "hi"
+  run_wrapper ask --model "Claude Opus 5.5 (High)" "hi"
   assert_eq 0 "$RC" "an old build should still work"
-  assert_contains "$OUT" "SETTINGS_MODEL_DURING_RUN=Claude Opus 4.6 (Thinking)" \
+  assert_contains "$OUT" "SETTINGS_MODEL_DURING_RUN=Claude Opus 5.5 (High)" \
     "old builds fall back to settings patching automatically"
 }
 
@@ -703,7 +733,7 @@ t_legacy_orphan_backup_is_recovered() {
   printf '%s\n%s\n' "999999" "Some Other Model" > "$AGY_HOME/.agy-plugin.patched"
   printf '{ "model": "Clobbered Model" }\n' > "$AGY_SETTINGS_FILE"
   run_wrapper models --ids >/dev/null 2>&1
-  assert_eq "Gemini 3.1 Pro (High)" "$(settings_model)" "an orphaned backup must be restored on next run"
+  assert_eq "Gemini 3.8 Flash (High)" "$(settings_model)" "an orphaned backup must be restored on next run"
 }
 
 # ----------------------------------------------------------- check/review --
@@ -1916,6 +1946,8 @@ it "alias: flash-medium"                                t_alias_flash_medium
 it "alias: pro-low"                                     t_alias_pro_low
 it "alias: opus"                                        t_alias_opus
 it "alias: sonnet"                                      t_alias_sonnet
+it "alias: opus-low / sonnet-med pick Claude effort"    t_alias_claude_effort_variants
+it "alias: pro-medium names the variants that exist"    t_alias_missing_effort_names_the_variants
 it "alias: gpt-oss"                                     t_alias_gpt_oss
 it "alias: case-insensitive"                            t_alias_is_case_insensitive
 it "alias: resolution is announced on stderr"           t_alias_resolution_is_announced
@@ -1929,6 +1961,8 @@ it "future: a family absent today resolves later"       t_future_new_family_reso
 it "future: version ordering is numeric"                t_future_version_ordering_is_numeric
 it "future: newest ignores locale collation"            t_future_newest_ignores_locale_collation
 it "future: claude picks the newest version, not name"  t_future_claude_picks_newest_version_not_name
+it "alias: claude prefers Opus on a version tie"        t_alias_claude_prefers_opus_on_tie
+it "future: claude takes a newer Sonnet over older Opus" t_future_claude_newer_sonnet_beats_older_opus
 it "future: gemini prefers high effort on a tie"        t_future_gemini_prefers_high_effort_on_a_tie
 it "future: unknown models pass through to agy"         t_future_unknown_model_is_passed_through
 it "future: exact id resolves without a warning"        t_exact_id_resolves_without_warning

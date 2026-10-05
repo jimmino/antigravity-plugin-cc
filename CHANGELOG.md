@@ -7,7 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Effort aliases for Claude models.** agy now offers Claude Opus 5.5 and
+  Claude Sonnet 5.5 in Low, Medium and High variants. New aliases pick one:
+  `opus-low`, `opus-medium` (`opus-med`), `opus-high`, `sonnet-low`,
+  `sonnet-medium` (`sonnet-med`), `sonnet-high`. Bare `opus` and `sonnet`
+  still take the highest effort offered. Like every built-in alias, they name
+  a family and effort, not a version.
+
+### Changed
+- **`claude` prefers Opus on a version tie.** Opus 5.5 and Sonnet 5.5 share
+  a version, and the id sort alone handed `claude` to Sonnet. Opus now wins
+  the tie. A newer Sonnet still beats an older Opus.
+- The test catalogue fixture now mirrors the live catalogue: Gemini 3.8 Flash
+  as the default model, and Opus 5.5 / Sonnet 5.5 in place of the retired
+  Claude 4.6 entries.
+
 ### Fixed
+- **`pro-medium` gave a misleading error.** Gemini Pro ships High and Low
+  only. The error said the newest Pro models "do not name their variants
+  low/medium/high", although they plainly do. It now says they have no
+  `medium` variant and lists the ones that exist.
 - **A denied URL fetch now counts as a cut-short turn.** Offloads flagged a
   turn as `PARTIAL` or `ABORTED` only when the denied action was a shell
   command. When the model reached for `read_url` to open a library's online
