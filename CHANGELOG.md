@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Prompt files caught up with the 0.9.0 profiles.** The `agy:offload`
+  subagent, the `offloading` skill and `/agy:review` still called `balanced`
+  the default; they now say the profile decides (`balanced` under `gemini`,
+  `sonnet` for offload and `opus` for review under `claude`). The
+  `antigravity-cli` skill named the subagent `agy`; it is `agy:runner`.
+- **`agy:runner` no longer triggers proactively.** Its description told
+  Claude to route hand-offs through it, while `/agy:delegate` says a
+  forward-only subagent spends Claude tokens for nothing. The subagent is now
+  for callers that ask for it by name or cannot run a slash command; plain
+  "ask agy" requests go to `/agy:delegate`. README and the site no longer
+  show delegate and research going through the subagent.
+
 ## [0.9.0] - 2026-10-05
 
 ### Added

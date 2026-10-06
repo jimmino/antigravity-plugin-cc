@@ -476,7 +476,7 @@
 </header>
 
 <main class="hero">
-  <span class="eyebrow">v0.8.0 · open source · MIT</span>
+  <span class="eyebrow">v0.9.0 · open source · MIT</span>
   <h1>Delegate tasks to Google <span class="grad">Antigravity</span> from inside Claude Code.</h1>
   <p class="lede">
     A small open-source plugin that wraps the <code class="inline">agy</code> CLI.
@@ -516,7 +516,7 @@
         <div class="step-num" aria-hidden="true"></div>
         <div>
           <h3 class="step-title">Install the plugin</h3>
-          <p class="step-desc">Pulls v0.8.0 into the user-scope plugin cache.</p>
+          <p class="step-desc">Pulls v0.9.0 into the user-scope plugin cache.</p>
           <div class="code">
             <button class="copy-btn" data-copy="/plugin install agy@antigravity-cc">Copy</button>
 <pre>/plugin install agy@antigravity-cc</pre>
@@ -564,7 +564,7 @@
       <div class="tile">
         <span class="tile-cmd">/agy:delegate</span>
         <h3 class="tile-title">Hand off a task</h3>
-        <p class="tile-desc">Route a discrete coding, refactor, or debugging task to the <code class="inline">agy:runner</code> subagent. Supports <code class="inline">--background</code> and <code class="inline">--model</code>.</p>
+        <p class="tile-desc">Hand a discrete coding, refactor, or debugging task to <code class="inline">agy</code> in one wrapper call, with no forwarding subagent. Supports <code class="inline">--background</code> and <code class="inline">--model</code>.</p>
       </div>
       <div class="tile">
         <span class="tile-cmd">/agy:research</span>
@@ -638,15 +638,14 @@
         <h3>How a request flows</h3>
 <div class="flow">Claude Code
   <span class="label">→</span> /agy:delegate
-    <span class="label">→</span> agy:runner subagent
-      <span class="label">→</span> agy-run.sh
-        <span class="label">→</span> agy -p "your task"
-          <span class="label">→</span> Gemini · Claude · OSS
+    <span class="label">→</span> agy-run.sh
+      <span class="label">→</span> agy -p "your task"
+        <span class="label">→</span> Gemini · Claude · OSS
 
 <span class="label"># Or just ask Claude:</span>
 "Ask agy to refactor this module."
-  <span class="label">→</span> agy:runner picks it up
-     automatically.</div>
+  <span class="label">→</span> the same wrapper call,
+     no subagent in between.</div>
       </div>
     </div>
   </div>

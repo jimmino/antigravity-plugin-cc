@@ -67,8 +67,11 @@ live `agy models` catalogue — so they follow new releases on their own. Run
 | Tier | Resolves to | For |
 |---|---|---|
 | `fast` | newest Flash, low effort | wide shallow sweeps, candidate lists |
-| `balanced` | newest Flash, high effort | **the default and the workhorse** |
+| `balanced` | newest Flash, high effort | **the workhorse** |
 | `deep` | newest Pro, high effort | situational; see below |
+
+Without `--model`, the profile picks the tier (`/agy:profile`): `balanced`
+under `gemini`, `sonnet` inside agy under `claude`.
 
 `fast` handles "find X in this code" but not "compare these two sets". Asked
 which numeric limits in a raw corpus were absent from a curated note set, Flash

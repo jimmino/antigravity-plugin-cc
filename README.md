@@ -121,8 +121,8 @@ You can also delegate by talking to Claude:
 Ask agy to look at this file and suggest a simpler design.
 ```
 
-Claude can route that through the `agy:runner` subagent on its own. The
-subagent runs on Haiku, because all it does is make one wrapper call.
+Claude runs the same wrapper call `/agy:delegate` makes, with no forwarding
+subagent in between, so the hand-off spends no extra Claude tokens.
 
 ### Review the current diff
 
@@ -400,7 +400,7 @@ prompts to a different model.
 ```
 
 The command wraps your topic in a research-oriented preamble (background,
-key findings, caveats, sources) and delegates to `agy:runner`. Long
+key findings, caveats, sources) and hands it to `agy` in one wrapper call. Long
 investigations work well in `--background`.
 
 ### Generate an image
@@ -420,7 +420,8 @@ you want the wrapper to copy it next to your project.
 Under the hood, the plugin is a thin wrapper around your local `agy` install:
 
 ```
-Claude Code  →  /agy:*  →  agy:runner subagent  →  agy-run.sh  →  agy -p "..."
+Claude Code  →  /agy:*  →  agy-run.sh  →  agy -p "..."
+Claude Code  →  agy:runner subagent  →  agy-run.sh  →  agy -p "..."   (programmatic callers)
 ```
 
 The offload commands take a second path through the same wrapper:

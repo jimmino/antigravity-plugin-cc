@@ -31,7 +31,8 @@ Anything long — a diff, a log excerpt, background — is piped in behind
 `--stdin`, never put in the prompt argument: the prompt travels on the command
 line, which Windows caps at ~32K characters.
 
-Tier: `balanced` is the default and the workhorse. `fast` for wide shallow
+Tier: without `--model` the profile decides — `balanced`, the workhorse, under
+`gemini`; `sonnet` inside agy under `claude`. `fast` for wide shallow
 sweeps; `deep` only for a bounded read over a file list you name explicitly, and
 never for anything phrased as security work — the newest Pro refuses that
 framing where Flash answers. Run

@@ -1,6 +1,6 @@
 ---
 name: runner
-description: Forward a task to the Google Antigravity CLI (`agy`). Use proactively when the parent thread should delegate a focused coding, debugging, refactor, or research task to Antigravity — or when the user says "ask agy", "delegate to agy", "run this through Antigravity", or "let Gemini take this".
+description: Forward a task to the Google Antigravity CLI (`agy`) and return its stdout verbatim. Use only when the user asks for this subagent by name, or when agy must be reached from inside an agent workflow where a slash command cannot run. For a direct hand-off ("ask agy", "delegate to agy", "let Gemini take this"), use /agy:delegate instead — it runs the same wrapper without spending Claude tokens on a forwarding subagent.
 model: haiku
 tools: Bash
 skills:
@@ -15,9 +15,9 @@ files, or follow up.
 
 ## When to take a task
 
-- The parent thread is handing off a discrete coding, debugging, refactoring,
-  or research task to Antigravity.
-- The user explicitly asked for `agy` / Antigravity / Gemini.
+- The user asked for the `agy:runner` subagent by name.
+- A caller inside an agent workflow, where `/agy:delegate` cannot run, hands
+  off a discrete coding, debugging, refactoring, or research task.
 
 Do not grab trivial questions the parent thread can answer in one breath.
 

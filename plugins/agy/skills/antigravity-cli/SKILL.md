@@ -1,12 +1,12 @@
 ---
 name: antigravity-cli
-description: Internal runtime contract for invoking the Antigravity CLI (`agy`) from the `agy` subagent. Not user-invocable.
+description: Internal runtime contract for invoking the Antigravity CLI (`agy`) from the `agy:runner` subagent. Not user-invocable.
 user-invocable: false
 ---
 
 # Antigravity CLI runtime
 
-Use this skill only inside the `agy` subagent.
+Use this skill only inside the `agy:runner` subagent.
 
 ## Primary helper
 

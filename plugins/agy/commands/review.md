@@ -43,8 +43,10 @@ leaves the machine, and the wrapper says which.
 
 ## Model choice
 
-Leave it on the default (`balanced`) unless the user asks otherwise. A
-reasoning-strong `deep` is tempting, but the newest Pro at high effort refuses
+Leave it on the profile default unless the user asks otherwise: `balanced`
+under `gemini`, `opus` inside agy under `claude` (`/agy:profile`). Under
+`gemini`, a reasoning-strong `deep` is tempting, but the newest Pro at high
+effort refuses
 prompts framed as security audits where Flash answers the same question
 correctly — and a review that asks about authorization and IDOR is
 security-shaped.
