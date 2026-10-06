@@ -476,7 +476,7 @@
 </header>
 
 <main class="hero">
-  <span class="eyebrow">v0.9.0 · open source · MIT</span>
+  <span class="eyebrow">v0.10.0 · open source · MIT</span>
   <h1>Delegate tasks to Google <span class="grad">Antigravity</span> from inside Claude Code.</h1>
   <p class="lede">
     A small open-source plugin that wraps the <code class="inline">agy</code> CLI.
@@ -516,10 +516,10 @@
         <div class="step-num" aria-hidden="true"></div>
         <div>
           <h3 class="step-title">Install the plugin</h3>
-          <p class="step-desc">Pulls v0.9.0 into the user-scope plugin cache.</p>
+          <p class="step-desc">Pulls v0.10.0 into the user-scope plugin cache.</p>
           <div class="code">
-            <button class="copy-btn" data-copy="/plugin install agy@antigravity-cc">Copy</button>
-<pre>/plugin install agy@antigravity-cc</pre>
+            <button class="copy-btn" data-copy="/plugin install agy-bridge@antigravity-cc">Copy</button>
+<pre>/plugin install agy-bridge@antigravity-cc</pre>
           </div>
         </div>
       </div>
@@ -531,9 +531,9 @@
           <p class="step-desc">Activates the slash commands and runs the install/auth check.</p>
           <div class="code">
             <button class="copy-btn" data-copy="/reload-plugins
-/agy:setup">Copy</button>
+/agy-bridge:setup">Copy</button>
 <pre>/reload-plugins
-/agy:setup</pre>
+/agy-bridge:setup</pre>
           </div>
         </div>
       </div>
@@ -547,57 +547,57 @@
     <h2 class="section-title">Ten workflows. <span class="grad">Two subagents.</span></h2>
     <p class="section-lede">
       Each tile is one entry point. Talk to Claude naturally or call the slash command directly.
-      <code class="inline">/agy:models</code> and <code class="inline">/agy:help</code> list the live model catalogue and every command.
+      <code class="inline">/agy-bridge:models</code> and <code class="inline">/agy-bridge:help</code> list the live model catalogue and every command.
     </p>
 
     <div class="tiles">
       <div class="tile">
-        <span class="tile-cmd">/agy:setup</span>
+        <span class="tile-cmd">/agy-bridge:setup</span>
         <h3 class="tile-title">Install and auth check</h3>
         <p class="tile-desc">Verify <code class="inline">agy</code> is on the box and signed in. Offers to install it on first run.</p>
       </div>
       <div class="tile">
-        <span class="tile-cmd">/agy:ask</span>
+        <span class="tile-cmd">/agy-bridge:ask</span>
         <h3 class="tile-title">One-shot prompt</h3>
         <p class="tile-desc">Send a single prompt to <code class="inline">agy</code> and stream the answer back into Claude Code, verbatim.</p>
       </div>
       <div class="tile">
-        <span class="tile-cmd">/agy:delegate</span>
+        <span class="tile-cmd">/agy-bridge:delegate</span>
         <h3 class="tile-title">Hand off a task</h3>
         <p class="tile-desc">Hand a discrete coding, refactor, or debugging task to <code class="inline">agy</code> in one wrapper call, with no forwarding subagent. Supports <code class="inline">--background</code> and <code class="inline">--model</code>.</p>
       </div>
       <div class="tile">
-        <span class="tile-cmd">/agy:research</span>
+        <span class="tile-cmd">/agy-bridge:research</span>
         <h3 class="tile-title">Deep research</h3>
         <p class="tile-desc">Wraps your topic in a structured research brief (background, findings, caveats, sources) and lets <code class="inline">agy</code> investigate.</p>
       </div>
       <div class="tile">
-        <span class="tile-cmd">/agy:image</span>
+        <span class="tile-cmd">/agy-bridge:image</span>
         <h3 class="tile-title">Generate images</h3>
         <p class="tile-desc">Native image generation via <code class="inline">agy</code>'s built-in Imagen tool. Optional <code class="inline">--name</code> and <code class="inline">--output</code> to drop the file next to your project.</p>
       </div>
       <div class="tile">
-        <span class="tile-cmd">/agy:review</span>
+        <span class="tile-cmd">/agy-bridge:review</span>
         <h3 class="tile-title">Read-only diff review</h3>
         <p class="tile-desc">Pipe the current <code class="inline">git diff</code> into <code class="inline">agy</code> as a context file for a steerable, read-only review. New files are named, <code class="inline">.env</code> never leaves the machine.</p>
       </div>
       <div class="tile">
-        <span class="tile-cmd">/agy:offload</span>
+        <span class="tile-cmd">/agy-bridge:offload</span>
         <h3 class="tile-title">Keep the tokens over there</h3>
         <p class="tile-desc"><code class="inline">agy</code> reads the files itself and hands back a short cited answer, so a repo-wide sweep costs your Claude Code context a few hundred tokens instead of a quarter of a million. Held read-only in plan mode.</p>
       </div>
       <div class="tile">
-        <span class="tile-cmd">/agy:fanout</span>
+        <span class="tile-cmd">/agy-bridge:fanout</span>
         <h3 class="tile-title">Several reads at once</h3>
         <p class="tile-desc">One question across many folders, or many questions about one tree. Each call takes a minute or three, so they run concurrently under a throttle.</p>
       </div>
       <div class="tile">
-        <span class="tile-cmd">/agy:second-opinion</span>
+        <span class="tile-cmd">/agy-bridge:second-opinion</span>
         <h3 class="tile-title">An independent view</h3>
         <p class="tile-desc">A fresh Claude Code, read-only in plan mode, that has not seen your conversation. It searches rather than brute-force reads, and tells you what would change its mind.</p>
       </div>
       <div class="tile">
-        <span class="tile-cmd">/agy:bridge</span>
+        <span class="tile-cmd">/agy-bridge:bridge</span>
         <h3 class="tile-title">agy drives, Claude works</h3>
         <p class="tile-desc">Gives <code class="inline">agy</code> a launcher at a fixed path and a skill that hands a task to a headless Claude Code. Read-only unless <code class="inline">agy</code> passes <code class="inline">--allow-write</code>, and even then it never runs commands or touches hook files.</p>
       </div>
@@ -637,7 +637,7 @@
       <div class="flow-card" aria-hidden="true">
         <h3>How a request flows</h3>
 <div class="flow">Claude Code
-  <span class="label">→</span> /agy:delegate
+  <span class="label">→</span> /agy-bridge:delegate
     <span class="label">→</span> agy-run.sh
       <span class="label">→</span> agy -p "your task"
         <span class="label">→</span> Gemini · Claude · OSS

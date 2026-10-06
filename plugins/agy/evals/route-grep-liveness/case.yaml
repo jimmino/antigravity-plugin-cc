@@ -1,0 +1,56 @@
+schema_version: "1.0"
+name: route-grep-liveness
+description: >
+  The real over-trigger. On 2026-09-19 Claude checked that the balanced tier
+  still worked by asking agy "which klapp agents call ask-gemini.ps1?". That
+  cost 275 s and 926 950 input / 56 822 output tokens, although a grep -n
+  run 18 s earlier in the same session had already answered it. The answer
+  was correct, so only a grader on the routing decision catches this.
+tags: [routing, strongest, field, mock]
+runs: 5
+context:
+  scaffold_script: scaffold.sh
+execution:
+  max_turns: 25
+  timeout_seconds: 900
+  allowed_tools: [Bash, Read, Grep, Glob, Skill, Agent]
+  env:
+    EVAL_FAKE_AGY_RESPONSE: "OK"
+    EVAL_FAKE_AGY_IN: "28687"
+    EVAL_FAKE_AGY_OUT: "135"
+  prompt: |
+    I just edited my agy aliases. Sanity-check that the balanced tier still
+    answers, then tell me which agent definitions in agents/ call
+    scripts/ask-gemini.ps1.
+graders:
+  - type: tool_used
+    name: no-enumeration-offload
+    tool: Bash
+    input_match: 'agy-run\.sh[\\"'']*\s+(offload|fanout)[\s\S]*agents'
+    min: 0
+    max: 0
+    weight: 4
+  # At most one agy call: one probe is enough to see the tier answer. A
+  # probe through the agy-bridge:offload subagent counts too: its Bash calls are in
+  # the trace.
+  - type: tool_used
+    name: one-probe-at-most
+    tool: Bash
+    input_match: 'agy-run\.sh[\\"'']*\s+(offload|fanout|ask)'
+    min: 0
+    max: 1
+    weight: 2
+  - type: llm
+    name: list-correct
+    focus: last_message
+    weight: 2
+    criteria: |
+      PASS if the answer names exactly these three agents as callers of
+      scripts/ask-gemini.ps1: klapp-bug-hunt, klapp-code-review,
+      klapp-second-opinion. Naming the other four (klapp-commit-preparer,
+      klapp-doc-sync, klapp-route-test-auditor, klapp-migration-check) as
+      non-callers is fine; naming any of them as a caller is a FAIL. The
+      answer must also say whether the balanced tier answered.
+expected_outcome: >
+  grep finds the three callers; the tier is checked with a trivial probe or
+  /agy-bridge:models, never with the enumeration question.

@@ -1,0 +1,59 @@
+schema_version: "1.0"
+name: route-meta-question
+description: >
+  A question ABOUT offloading may load the doctrine, but must not run an
+  offload. Origin: AIUcto ("which of these /list-agents can be offloaded to
+  AGY", 2026-09-19) and Garmin ("analyze which agents or workload can be
+  offloaded", 2026-09-20) both loaded the skill as reference material. A
+  suite that counts "skill loaded" as "offload fired" scores those wrong.
+tags: [routing, field, mock]
+runs: 3
+context:
+  scaffold_script: scaffold.sh
+execution:
+  max_turns: 20
+  timeout_seconds: 600
+  allowed_tools: [Bash, Read, Grep, Glob, Skill, Agent]
+  env:
+    EVAL_FAKE_AGY_RESPONSE: "fake-agy-ok"
+  prompt: |
+    Which kinds of work in this repo would be worth offloading to agy, and
+    which would not? Keep it short.
+graders:
+  - type: tool_used
+    name: no-wrapper-call
+    tool: Bash
+    input_match: 'agy-run\.sh[\\"'']*\s+(offload|fanout|review|second-opinion)'
+    min: 0
+    max: 0
+    weight: 3
+  - type: tool_used
+    name: no-offload-subagent
+    tool: Agent
+    input_match: '"subagent_type":\s*"agy:'
+    min: 0
+    max: 0
+    weight: 2
+  - type: tool_used
+    name: doctrine-loaded
+    tool: Skill
+    input_match: 'offloading'
+    min: 1
+    weight: 1
+    arm: with-only
+  - type: llm
+    name: answer-matches-doctrine
+    focus: last_message
+    weight: 2
+    criteria: |
+      PASS if the answer, grounded in this repo, says roughly:
+      - worth offloading: wide semantic reads over src/ (about 1 MB,
+        110 modules), such as architecture maps or "where is X handled",
+        with the vendored node_modules excluded;
+      - not worth offloading: anything a count, grep, file list or diff
+        answers (logs/app.log counts, import lists), and small files that
+        are cheaper to read directly.
+      FAIL if it recommends offloading counting or grep-shaped questions, or
+      if it ran an offload to find out.
+expected_outcome: >
+  Short routing advice; the skill may load; no agy call.

@@ -44,7 +44,7 @@ leaves the machine, and the wrapper says which.
 ## Model choice
 
 Leave it on the profile default unless the user asks otherwise: `balanced`
-under `gemini`, `opus` inside agy under `claude` (`/agy:profile`). Under
+under `gemini`, `opus` inside agy under `claude` (`/agy-bridge:profile`). Under
 `gemini`, a reasoning-strong `deep` is tempting, but the newest Pro at high
 effort refuses
 prompts framed as security audits where Flash answers the same question

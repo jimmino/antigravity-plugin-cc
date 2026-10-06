@@ -1,0 +1,73 @@
+schema_version: "1.0"
+name: positive-diff-review
+description: >
+  Positive control for long context: a working-tree diff goes to agy on
+  stdin (or through /agy-bridge:review), never pasted into the prompt, which
+  travels on a command line Windows caps at ~32K characters. Origin: the
+  2026-09-24 MeetApp sharp loader review, piped from a scratch clone.
+tags: [positive, prompt-shape, field, mock]
+runs: 3
+context:
+  scaffold_script: scaffold.sh
+execution:
+  max_turns: 30
+  timeout_seconds: 900
+  allowed_tools: [Bash, Read, Grep, Glob, Skill]
+  env:
+    EVAL_FAKE_AGY_RESPONSE: |-
+      LOW | src/photo.service.ts:9 | ALLOWED_LOADERS lists only the Buffer loaders, so a file-path input would be refused | render() only receives a Buffer today, so there is no live path
+      NONE | src/photo.service.ts:10 | block and unblock run at module load, so the block is in force before render() can run
+    EVAL_FAKE_AGY_IN: "420440"
+    EVAL_FAKE_AGY_OUT: "3100"
+  prompt: |
+    Before I commit: get agy's independent check of my uncommitted change
+    to src/photo.service.ts. Correctness only. Can any input still reach a
+    libvips loader other than the three it allows, and can a legitimate
+    JPEG, PNG or WebP now be refused?
+graders:
+  - type: tool_used
+    name: diff-on-stdin-or-review
+    tool: Bash
+    input_match: '(agy-run\.sh[\\"'']*\s+review|diff[\s\S]{0,400}\|[\s\S]{0,400}agy-run\.sh[\\"'']*\s+offload[\s\S]{0,400}--stdin)'
+    min: 1
+    weight: 3
+  - type: tool_used
+    name: diff-not-in-prompt
+    tool: Bash
+    input_match: 'agy-run\.sh[\\"'']*\s+offload[\s\S]*@@ -\d'
+    min: 0
+    max: 0
+    weight: 2
+  - type: tool_used
+    name: no-edits
+    tool: Edit
+    min: 0
+    max: 0
+    weight: 1
+  # /agy-bridge:review builds its own prompt, so it passes; a hand-written offload
+  # prompt must carry both a bound and a markup ban.
+  - type: tool_used
+    name: prompt-shaped
+    tool: Bash
+    input_match: '(agy-run\.sh[\\"'']*\s+review|agy-run\.sh[\\"'']*\s+offload(?=[\s\S]*([Aa]t most \d+|[Nn]o more than \d+|\d+ lines|[Oo]ne line (per|for each|each)))(?=[\s\S]*([Pp]lain text|[Nn]o markdown)))'
+    min: 1
+    weight: 2
+  # Regex over the full trace: the judge sees only its head and tail.
+  - type: regex
+    name: findings-checked-in-file
+    target: trace
+    pattern: '"command":"(?:[^"\\]|\\.)*agy-run\.sh(?:[^"\\]|\\.)*(offload|review)[\s\S]*("name":"Read","input":\{"file_path":"[^"]*photo\.service\.ts|"command":"(?=(?:[^"\\]|\\.)*\b(sed|grep|cat|head|nl|awk)\b)(?=(?:[^"\\]|\\.)*photo\.service\.ts))'
+    weight: 2
+  - type: llm
+    name: findings-framed
+    focus: last_message
+    weight: 2
+    criteria: |
+      PASS if the reply presents agy's findings as candidates with the
+      agent's own verdict on each (for example: line 9 is accurate, but
+      render() only receives a Buffer, so there is no live path) and does
+      not claim to have changed code.
+      FAIL if agy's findings are relayed as a verdict with no assessment.
+expected_outcome: >
+  git diff piped behind --stdin (or /agy-bridge:review), bounded prompt, cited
+  lines checked, findings reported with the agent's verdict, no edits.

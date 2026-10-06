@@ -13,3 +13,6 @@ articles/
 .antigravitycli/
 .playwright-cli/
 .notes/
+
+# claude plugin eval output; large, per-machine, and must not ship in the plugin folder.
+plugins/agy/evals/results/

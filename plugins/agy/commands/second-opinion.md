@@ -13,7 +13,7 @@ A second opinion from Claude, held read-only. It runs one of two ways:
   agy gives it only a file viewer, so the wrapper hands it a map of the
   workspace instead of a search tool. It spends the Google plan's quota, not
   the user's Claude plan. The default under the `claude` profile
-  (`/agy:profile`).
+  (`/agy-bridge:profile`).
 
 Without `--via`, the profile decides, and `second-opinion.via` in the config
 file beats the profile.

@@ -42,11 +42,11 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" ask --for research --model <valu
 
 ## Choosing `--model`
 
-Without `--model`, the user's profile decides (`/agy:profile`). The `claude`
+Without `--model`, the user's profile decides (`/agy-bridge:profile`). The `claude`
 profile picks Opus inside agy, on the Google plan's quota. The default
 `gemini` profile leaves the choice to the agy TUI's model; `deep` (newest Pro
 at high effort) or `opus` work well for research. Aliases resolve against the
-live catalogue — run `/agy:models` to see it rather than reciting model names
+live catalogue — run `/agy-bridge:models` to see it rather than reciting model names
 from memory.
 
 ## Response style

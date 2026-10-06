@@ -40,12 +40,12 @@ out.
 - an **intent alias** — `fast`, `balanced`, `deep`, `flash`, `pro`, `sonnet`,
   `opus`, `gpt-oss` and friends. These name a family and effort level, not a
   version, so they follow the catalogue as Google ships new models.
-- an **exact model id or display name** from `/agy:models`, when the user
+- an **exact model id or display name** from `/agy-bridge:models`, when the user
   wants a specific version pinned.
 - anything else, which is forwarded to `agy` untouched — this is how custom
   models configured in the user's agy settings keep working.
 
-Do not recite a model list from memory. Run `/agy:models` when the user asks
+Do not recite a model list from memory. Run `/agy-bridge:models` when the user asks
 what is available, or when an alias does not resolve.
 
 Notes:
@@ -53,12 +53,12 @@ Notes:
 - The wrapper prints one `[wrapper] model: <alias> -> <id>` line on stderr so
   the user can see which concrete model an alias selected. Leave it in.
 - If the wrapper reports `agy is not installed` or `not authenticated`, stop
-  and tell the user to run `/agy:setup`.
+  and tell the user to run `/agy-bridge:setup`.
 - If the user's request is empty, ask what they want to ask Antigravity.
-- For multi-step or long-running work, suggest `/agy:delegate`, which
+- For multi-step or long-running work, suggest `/agy-bridge:delegate`, which
   supports `--background`.
-- Without `--model`, the user's profile decides (`/agy:profile`). Under the
+- Without `--model`, the user's profile decides (`/agy-bridge:profile`). Under the
   `claude` profile that is a Claude model inside agy, on the Google plan.
 - `ask` is a plain pass-through: the run is **not** held read-only, carries no
   guard, and returns no telemetry. When the point is to have `agy` *read* a
-  codebase and hand back a short cited answer, use `/agy:offload` instead.
+  codebase and hand back a short cited answer, use `/agy-bridge:offload` instead.

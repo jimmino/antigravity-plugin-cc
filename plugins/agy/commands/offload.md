@@ -15,7 +15,7 @@ argument):
 $ARGUMENTS
 ```
 
-Read the `agy:offloading` skill first if you have not already this session. It
+Read the `agy-bridge:offloading` skill first if you have not already this session. It
 holds the rules that decide whether this call earns its keep or burns quota for
 nothing.
 
@@ -53,11 +53,11 @@ git --no-pager diff HEAD -- <paths> |
 Flags, all before the prompt:
 
 - `--model <alias|id>` (`--tier` is a synonym) — without it the profile
-  decides (`/agy:profile`): `balanced`, the workhorse, under `gemini`;
+  decides (`/agy-bridge:profile`): `balanced`, the workhorse, under `gemini`;
   `sonnet` inside agy under `claude`, which spends the Google plan's quota
   instead of the user's Claude plan. `fast` for wide shallow sweeps, `deep` for a bounded read over a
   file list you name explicitly. Aliases resolve against the live catalogue;
-  run `/agy:models` rather than reciting names.
+  run `/agy-bridge:models` rather than reciting names.
 - `--dir <path>` — the workspace root. Defaults to the project directory.
 - `--add-dir <path>` — extra roots, repeatable. Use it to span sibling trees
   instead of pointing `--dir` at their common parent, which is usually where

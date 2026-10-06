@@ -29,14 +29,14 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" ask --for delegate --model <valu
 
 ## Choosing `--model`
 
-Without `--model`, the user's profile decides (`/agy:profile`). Under the
+Without `--model`, the user's profile decides (`/agy-bridge:profile`). Under the
 `claude` profile that is a Claude model inside agy, which runs on the Google
 plan's quota. Under the default `gemini` profile it is whatever the user's agy
 TUI is set to.
 
 Prefer an intent alias — `fast`, `balanced`, `deep`, `flash`, `pro`,
 `sonnet`, `opus`, `gpt-oss` — which resolves against the live catalogue
-rather than a pinned version. Run `/agy:models` rather than reciting a model
+rather than a pinned version. Run `/agy-bridge:models` rather than reciting a model
 list from memory.
 
 ## Response style

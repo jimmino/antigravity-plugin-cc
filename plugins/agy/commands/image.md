@@ -60,4 +60,4 @@ file wasn't located. Generated files normally live under
 - If the user did not provide any description, ask what they want to
   generate.
 - If the wrapper reports `agy is not installed` or `not authenticated`,
-  stop and tell the user to run `/agy:setup`.
+  stop and tell the user to run `/agy-bridge:setup`.

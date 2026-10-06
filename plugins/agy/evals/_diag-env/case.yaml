@@ -1,0 +1,32 @@
+schema_version: "1.0"
+name: diag-env
+description: >
+  Diagnostic, not a test of the plugin. Reports what the sandboxed eval
+  child actually gets: HOME, PATH, the names of its environment variables,
+  whether an agy binary is reachable, and whether it has network access.
+  Run it after any change to the eval host (sandbox, agy install, login).
+  Variable values other than HOME and PATH are never printed.
+tags: [diagnostic]
+runs: 1
+context:
+  scaffold_script: scaffold.sh
+execution:
+  model: haiku
+  max_turns: 6
+  timeout_seconds: 300
+  allowed_tools: [Bash]
+  prompt: |
+    Run this exact command with the Bash tool, then reply with its full
+    output inside one code block and nothing else:
+
+    echo "HOME=$HOME"; echo "PATH=$PATH"; echo "ENV NAMES: $(env | cut -d= -f1 | sort | tr '\n' ' ')"; echo "command -v agy: $(command -v agy || echo none)"; for p in "$HOME/.local/bin/agy" /home/*/.local/bin/agy; do [ -e "$p" ] && echo "exists: $p"; done; ls -ld /home/*/.gemini 2>&1 | head -3; cat scaffold-pwd.txt; echo "HOME has: $(ls -A "$HOME" | xargs)"; for m in .gemini/antigravity-cli/marker .config/antigravity/marker .agy-eval/marker plain-marker; do [ -e "$HOME/$m" ] && echo "survives: $m" || echo "missing: $m"; done; echo "net: $(curl -sS -o /dev/null -w '%{http_code}' --max-time 8 https://www.googleapis.com 2>&1 | tail -c 120)"; echo "XDG_CACHE_HOME=$XDG_CACHE_HOME TMPDIR=$TMPDIR"; echo "agy --help has models: $(agy --help 2>&1 | grep -c models)"; echo "agy models: $(agy models 2>&1 | head -2 | xargs)"; W=$(cat wrapper-path.txt); echo "wrapper models:"; bash "$W" models 2>&1 | head -6; echo "wrapper offload:"; bash "$W" offload --dir "$PWD" "reply OK" 2>&1 | head -4
+
+    This run is a diagnostic: report the output as it is.
+graders:
+  - type: regex
+    name: probe-ran
+    target: last_message
+    pattern: 'HOME=/'
+    weight: 1
+expected_outcome: >
+  The raw probe output; read it, do not score it.
