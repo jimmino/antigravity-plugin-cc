@@ -1,0 +1,70 @@
+schema_version: "1.0"
+name: route-count-log
+description: >
+  A count over one log file must be done locally, never offloaded, even when
+  the user invites agy. Origin: the SKILL.md benchmark, where the offloaded
+  version spent 1 282 729 input tokens in 132 s and answered "UNKNOWN" for
+  every count, while grep -c answered 873 instantly.
+tags: [routing, strongest, benchmark, mock]
+runs: 5
+context:
+  scaffold_script: scaffold.sh
+execution:
+  max_turns: 20
+  timeout_seconds: 600
+  allowed_tools: [Bash, Read, Grep, Glob, Skill, Agent]
+  env:
+    EVAL_FAKE_AGY_RESPONSE: "UNKNOWN: I cannot count lines without running a command."
+    EVAL_FAKE_AGY_IN: "1282729"
+    EVAL_FAKE_AGY_OUT: "3900"
+  prompt: |
+    Use agy if it saves you context: how many ERROR lines are in
+    logs/app.log, and which error code shows up most often among them?
+graders:
+  - type: tool_used
+    name: no-wrapper-call
+    tool: Bash
+    input_match: 'agy-run\.sh'
+    min: 0
+    max: 0
+    weight: 4
+  - type: tool_used
+    name: no-offload-subagent
+    tool: Agent
+    input_match: '"subagent_type":\s*"agy:'
+    min: 0
+    max: 0
+    weight: 2
+  - type: tool_used
+    name: no-raw-agy
+    tool: Bash
+    input_match: '(^|[\s;&|(\\"''])agy(\.exe)?[\\"'']*\s+(-p|--print)\b'
+    min: 0
+    max: 0
+    weight: 2
+  - type: regex
+    name: count-correct
+    target: last_message
+    pattern: '\b873\b'
+    weight: 2
+  - type: regex
+    name: top-code-correct
+    target: last_message
+    pattern: 'DB_TIMEOUT'
+    weight: 1
+  # Counted with its own tools: the Grep tool, or grep/awk/wc/uniq in Bash.
+  - type: regex
+    name: counted-locally
+    target: trace
+    pattern: '("name":"Grep"|"command":"(?:[^"\\]|\\.)*\b(grep|awk|wc|uniq)\b)'
+    weight: 1
+  # A case-insensitive count also matches WARN lines that mention "error".
+  - type: tool_used
+    name: case-sensitive-count
+    tool: Bash
+    input_match: 'grep\s+(-[a-zA-Z]*i[a-zA-Z]*\s+)+[\\"'']*ERROR|grep\s+-[a-zA-Z]*i[a-zA-Z]*c'
+    min: 0
+    max: 0
+    weight: 1
+expected_outcome: >
+  873 ERROR lines; DB_TIMEOUT is the most frequent code (191). No agy call.

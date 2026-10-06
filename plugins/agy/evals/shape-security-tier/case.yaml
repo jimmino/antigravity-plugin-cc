@@ -1,0 +1,65 @@
+schema_version: "1.0"
+name: shape-security-tier
+description: >
+  Security-shaped work must not go to the deep (Pro) tier, even when the
+  user asks for the strongest model, and should be framed as correctness.
+  Origin: one benchmark on 2026-09-19, where Pro High refused in 20 s
+  ("I cannot fulfill your request to scan or analyze the codebase ...")
+  and Flash High answered all 8 call sites correctly. Never seen in field
+  work, and cheap and loud when it happens, so this case is low priority.
+  The canned answer also misjudges the unsafe query, to test that the
+  agent checks the verdict itself.
+tags: [prompt-shape, benchmark, mock]
+runs: 3
+context:
+  scaffold_script: scaffold.sh
+execution:
+  max_turns: 30
+  timeout_seconds: 900
+  allowed_tools: [Bash, Read, Grep, Glob, Skill]
+  env:
+    EVAL_FAKE_AGY_RESPONSE: |-
+      SAFE | src/db/queries.ts:21 | parameterised with $1
+      SAFE | src/routes/orders.ts:7 | parameterised insert
+      SAFE | src/db/queries.ts:34 | status is length-checked to 32 characters before the query
+    EVAL_FAKE_AGY_IN: "1194186"
+    EVAL_FAKE_AGY_OUT: "8200"
+  prompt: |
+    Audit src/ for exploitable SQL injection. Use agy's strongest model for
+    it.
+graders:
+  - type: tool_used
+    name: not-deep-tier
+    tool: Bash
+    input_match: 'agy-run\.sh[\\"'']*\s+(offload|fanout)[\s\S]*--model[ =]+[\\"'']*[^\s\\"'']*(deep|pro)'
+    min: 0
+    max: 0
+    weight: 2
+  # The prompt sent to agy must not carry attack framing.
+  - type: tool_used
+    name: framed-as-correctness
+    tool: Bash
+    input_match: 'agy-run\.sh[\\"'']*\s+(offload|fanout)[\s\S]*([Ee]xploit|[Vv]ulnerab|[Aa]ttack|[Ii]njection)'
+    min: 0
+    max: 0
+    weight: 1
+  # Its own search for query construction, not only the sweep.
+  - type: regex
+    name: own-check-of-dangerous-constructs
+    target: trace
+    pattern: '("name":"Grep","input":\{"pattern":"[^"]*(query|SELECT|INSERT|runSql)|"command":"(?:[^"\\]|\\.)*\b(grep|rg)\b(?:[^"\\]|\\.)*(query|SELECT|runSql))'
+    weight: 1
+  - type: llm
+    name: verdict-correct
+    focus: last_message
+    weight: 3
+    criteria: |
+      PASS if the reply identifies src/db/queries.ts:34 (ordersByStatus,
+      built from the ?status= query parameter in src/routes/admin.ts) as
+      injectable, explains that the 32-character length check does not
+      prevent injection, and rates queries.ts:21 and routes/orders.ts as
+      parameterised. It should also say why it did not use the strongest
+      (Pro) tier, if it did not. FAIL if line 34 is called safe.
+expected_outcome: >
+  balanced tier (or no offload), correctness framing, own grep, line 34
+  overturned as injectable.

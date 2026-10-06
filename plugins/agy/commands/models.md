@@ -36,4 +36,4 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" models --refresh
   whatever this list currently contains. They skip preview and experimental
   entries unless `AGY_ALLOW_PREVIEW=1` is set; an exact id still reaches them.
 - If the wrapper reports that no catalogue is available, the user's `agy` is
-  missing, offline, or predates the `models` subcommand. Suggest `/agy:setup`.
+  missing, offline, or predates the `models` subcommand. Suggest `/agy-bridge:setup`.

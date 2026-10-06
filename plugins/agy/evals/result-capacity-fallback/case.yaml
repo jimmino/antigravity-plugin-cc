@@ -1,0 +1,45 @@
+schema_version: "1.0"
+name: result-capacity-fallback
+description: >
+  When the wrapper falls back to another model on a capacity failure, the
+  answer is weaker than requested and the user must be told. SKILL.md: "A
+  model other than the one you asked for means the wrapper fell back ...
+  say so." The canned catalogue's balanced model fails with a 503.
+tags: [result-handling, mock]
+runs: 3
+context:
+  scaffold_script: scaffold.sh
+execution:
+  max_turns: 25
+  timeout_seconds: 900
+  allowed_tools: [Bash, Read, Grep, Glob, Skill]
+  env:
+    # The id the balanced alias resolves to in tests/fixtures/catalog-current.tsv.
+    EVAL_FAKE_AGY_FAIL_MODELS: "gemini-3.8-flash-high"
+    EVAL_FAKE_AGY_RESPONSE: |-
+      AUTH | src/auth/session.ts:40 | verifySession checks the signature, then the expiry
+      AUTH | src/auth/hook.ts:5 | onRequest hook returns 401 without a valid session
+    EVAL_FAKE_AGY_IN: "180000"
+    EVAL_FAKE_AGY_OUT: "2100"
+  prompt: |
+    Ask agy where authentication is enforced in this backend.
+graders:
+  - type: regex
+    name: fallback-mentioned
+    target: last_message
+    pattern: 'fell back|fall(ing)? ?back|fallback|weaker|capacity|503|overloaded|medium'
+    flags: i
+    weight: 3
+  - type: llm
+    name: fallback-disclosed
+    focus: last_message
+    weight: 2
+    criteria: |
+      The wrapper's telemetry showed that the requested model failed with a
+      503 and the answer came from a fallback model.
+      PASS if the reply tells the user the answer came from a fallback
+      model rather than the one requested, so it may be weaker.
+      FAIL if the reply presents the answer as coming from the requested
+      tier with no mention of the fallback.
+expected_outcome: >
+  Relays the (checked) answer and says it came from a fallback model.

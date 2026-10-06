@@ -1,12 +1,12 @@
 ---
 name: antigravity-cli
-description: Internal runtime contract for invoking the Antigravity CLI (`agy`) from the `agy` subagent. Not user-invocable.
+description: Internal runtime contract for invoking the Antigravity CLI (`agy`) from the `agy-bridge:runner` subagent. Not user-invocable.
 user-invocable: false
 ---
 
 # Antigravity CLI runtime
 
-Use this skill only inside the `agy` subagent.
+Use this skill only inside the `agy-bridge:runner` subagent.
 
 ## Primary helper
 
@@ -77,7 +77,7 @@ prompt argument:
 
 ## What this skill does NOT do
 
-- Does not install or authenticate `agy`. That is `/agy:setup`'s job.
+- Does not install or authenticate `agy`. That is `/agy-bridge:setup`'s job.
 - Does not retry, summarize, or post-process `agy`'s output.
 - Does not read files, run `git`, or make HTTP calls outside the wrapper.
 

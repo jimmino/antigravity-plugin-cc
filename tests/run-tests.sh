@@ -542,7 +542,7 @@ t_model_table_is_live_not_hardcoded() {
 t_help_contains_no_hardcoded_model_versions() {
   run_wrapper help
   assert_eq 0 "$RC" "help should succeed"
-  assert_contains "$OUT" "/agy:models" "help documents the models command"
+  assert_contains "$OUT" "/agy-bridge:models" "help documents the models command"
   assert_contains "$OUT" "gemini-3.8-flash-high" "help shows live catalogue entries"
 }
 
@@ -1603,22 +1603,24 @@ t_ask_claude_default_timeout() {
 # -------------------------------------------------------------- bridge ----
 bridge_dir() { printf '%s' "$HOME/.gemini/config/skills/ask-claude"; }
 
-# Records $1 as the agy plugin Claude Code has installed, the way
-# installed_plugins.json does.
+# Records $1 as the agy-bridge plugin Claude Code has installed, the way
+# installed_plugins.json does. $2 overrides the key, e.g. the pre-rename
+# agy@antigravity-cc.
 register_agy_plugin() {
   mkdir -p "$HOME/.claude/plugins"
-  python3 - "$HOME/.claude/plugins/installed_plugins.json" "$1" <<'PY'
+  python3 - "$HOME/.claude/plugins/installed_plugins.json" "$1" "${2:-agy-bridge@antigravity-cc}" <<'PY'
 import json, sys
 entry = {"scope": "user", "installPath": sys.argv[2], "version": "test"}
 with open(sys.argv[1], "w", encoding="utf-8") as fh:
-    json.dump({"version": 2, "plugins": {"agy@antigravity-cc": [entry]}}, fh)
+    json.dump({"version": 2, "plugins": {sys.argv[3]: [entry]}}, fh)
 PY
 }
 
 # A copy of the wrapper in Claude Code's plugin cache as version $1; prints
 # the plugin root. With a second argument, a wrapper from before the bridge.
+# CACHE_PLUGIN_NAME=agy puts it where the plugin went before the rename.
 cache_agy_version() {
-  local root="$HOME/.claude/plugins/cache/antigravity-cc/agy/$1"
+  local root="$HOME/.claude/plugins/cache/antigravity-cc/${CACHE_PLUGIN_NAME:-agy-bridge}/$1"
   mkdir -p "$root/scripts"
   if [ -n "${2:-}" ]; then
     printf '#!/usr/bin/env bash\necho "old wrapper: $*"\n' > "$root/scripts/agy-run.sh"
@@ -1672,7 +1674,7 @@ t_bridge_launcher_follows_the_registry() {
   run_wrapper bridge install
   run_launcher --where
   assert_eq 0 "$RC" "the launcher should find the plugin"
-  assert_contains "$OUT" "/agy/0.8.0/scripts/agy-run.sh" "the registered version wins"
+  assert_contains "$OUT" "/agy-bridge/0.8.0/scripts/agy-run.sh" "the registered version wins"
 }
 
 t_bridge_launcher_falls_back_to_the_newest_cached_version() {
@@ -1683,7 +1685,7 @@ t_bridge_launcher_falls_back_to_the_newest_cached_version() {
   run_wrapper bridge install
   run_launcher --where
   assert_eq 0 "$RC" "the launcher should find the plugin"
-  assert_contains "$OUT" "/agy/0.10.0/scripts/agy-run.sh" "newest by number that knows ask-claude"
+  assert_contains "$OUT" "/agy-bridge/0.10.0/scripts/agy-run.sh" "newest by number that knows ask-claude"
 }
 
 t_bridge_launcher_refuses_a_plugin_older_than_the_bridge() {
@@ -1695,6 +1697,27 @@ t_bridge_launcher_refuses_a_plugin_older_than_the_bridge() {
   assert_eq 127 "$RC" "an installed plugin without ask-claude is an error"
   assert_contains "$ERR" "older than this bridge" "that says to update"
   assert_not_contains "$OUT" "old wrapper" "the old wrapper must not run"
+}
+
+t_bridge_launcher_finds_a_pre_rename_install() {
+  # Until Claude Code applies the marketplace's renames map, the registry
+  # still lists the plugin as agy@antigravity-cc.
+  export AGY_BRIDGE_WINDOWS=0
+  register_agy_plugin "$(CACHE_PLUGIN_NAME=agy cache_agy_version 0.9.0)" "agy@antigravity-cc"
+  run_wrapper bridge install
+  run_launcher --where
+  assert_eq 0 "$RC" "the launcher should find the plugin under its old name"
+  assert_contains "$OUT" "/agy/0.9.0/scripts/agy-run.sh" "the old registry key still counts"
+}
+
+t_bridge_launcher_prefers_the_new_name_in_the_cache() {
+  export AGY_BRIDGE_WINDOWS=0
+  CACHE_PLUGIN_NAME=agy cache_agy_version 0.9.0 >/dev/null
+  cache_agy_version 0.10.0 >/dev/null
+  run_wrapper bridge install
+  run_launcher --where
+  assert_eq 0 "$RC" "the launcher should find the plugin"
+  assert_contains "$OUT" "/agy-bridge/0.10.0/scripts/agy-run.sh" "the renamed, newer copy wins"
 }
 
 t_bridge_launcher_decodes_windows_arguments() {
@@ -1784,7 +1807,7 @@ t_bridge_skill_text_keeps_ampersands() {
 # ---------------------------------------------------------- regressions ----
 t_json_escaping_round_trips() {
   # A backslash or newline in a path or version string must survive into
-  # valid JSON — `check` output is parsed by /agy:setup.
+  # valid JSON — `check` output is parsed by /agy-bridge:setup.
   local input escaped decoded
   input="$(printf 'C:\\agy\\bin "quoted"\tTAB\nline2')"
   escaped="$( source "$WRAPPER"; j_esc "$input" )"
@@ -2396,6 +2419,8 @@ it "bridge: the launcher runs the installed plugin"        t_bridge_launcher_run
 it "bridge: the launcher follows the registry"             t_bridge_launcher_follows_the_registry
 it "bridge: without a registry, newest cached version"     t_bridge_launcher_falls_back_to_the_newest_cached_version
 it "bridge: a plugin older than the bridge is refused"     t_bridge_launcher_refuses_a_plugin_older_than_the_bridge
+it "bridge: finds an install from before the rename"       t_bridge_launcher_finds_a_pre_rename_install
+it "bridge: prefers agy-bridge over agy in the cache"      t_bridge_launcher_prefers_the_new_name_in_the_cache
 it "bridge: Windows arguments arrive intact"               t_bridge_launcher_decodes_windows_arguments
 it "bridge: Windows gets the PowerShell launcher"          t_bridge_install_on_windows_adds_the_powershell_launcher
 it "bridge: install keeps a file it did not write"         t_bridge_install_keeps_a_file_it_did_not_write

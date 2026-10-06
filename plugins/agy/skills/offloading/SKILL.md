@@ -2,8 +2,8 @@
 name: offloading
 description: >
   Doctrine for offloading bulk or wide-context reading to the Antigravity CLI (agy) instead
-  of reading it into this context window. Backs /agy:offload, /agy:fanout, /agy:review and
-  the agy:offload subagent — read it before the first offload call in a session. Use when a
+  of reading it into this context window. Backs /agy-bridge:offload, /agy-bridge:fanout, /agy-bridge:review and
+  the agy-bridge:offload subagent — read it before the first offload call in a session. Use when a
   question spans more source than is worth pulling into the window: repo-wide
   reconnaissance across dozens of files, "where is X handled", candidate generation for a
   review or audit, or a second opinion from a model that has not seen this conversation. Do
@@ -19,16 +19,16 @@ avoid a quarter-million tokens of context.**
 
 | Command | For |
 |---|---|
-| `/agy:offload` | the workhorse — a read-only bulk read, tiered |
-| `/agy:review` | independent review of the working diff |
-| `/agy:second-opinion` | a fresh read-only Claude Code in plan mode (it can search, not just read) |
-| `/agy:fanout` | several offload jobs in parallel |
-| `/agy:ask` | a plain `agy -p` pass-through — not read-only, no guard, no telemetry |
+| `/agy-bridge:offload` | the workhorse — a read-only bulk read, tiered |
+| `/agy-bridge:review` | independent review of the working diff |
+| `/agy-bridge:second-opinion` | a fresh read-only Claude Code in plan mode (it can search, not just read) |
+| `/agy-bridge:fanout` | several offload jobs in parallel |
+| `/agy-bridge:ask` | a plain `agy -p` pass-through — not read-only, no guard, no telemetry |
 
-`/agy:offload`, `/agy:fanout` and `/agy:review` all run `agy --mode plan` with
+`/agy-bridge:offload`, `/agy-bridge:fanout` and `/agy-bridge:review` all run `agy --mode plan` with
 slash commands disabled, so the model cannot write files or run commands. This
 matters most in a folder `agy` already trusts, where it would otherwise be
-allowed to edit. The `agy:offload` subagent is the programmatic path to the same
+allowed to edit. The `agy-bridge:offload` subagent is the programmatic path to the same
 engine.
 
 ## The one rule
@@ -62,13 +62,16 @@ window.
 
 Aliases name a *family and effort*, never a version, and resolve against the
 live `agy models` catalogue — so they follow new releases on their own. Run
-`/agy:models` rather than reciting model names.
+`/agy-bridge:models` rather than reciting model names.
 
 | Tier | Resolves to | For |
 |---|---|---|
 | `fast` | newest Flash, low effort | wide shallow sweeps, candidate lists |
-| `balanced` | newest Flash, high effort | **the default and the workhorse** |
+| `balanced` | newest Flash, high effort | **the workhorse** |
 | `deep` | newest Pro, high effort | situational; see below |
+
+Without `--model`, the profile picks the tier (`/agy-bridge:profile`): `balanced`
+under `gemini`, `sonnet` inside agy under `claude`.
 
 `fast` handles "find X in this code" but not "compare these two sets". Asked
 which numeric limits in a raw corpus were absent from a curated note set, Flash
@@ -100,7 +103,7 @@ listing tool and guessed file names from the ones it had read. With the file
 map the wrapper now writes, the same question found hits across five subfolders
 (64 s, 193 k in). Keep the map unless the prompt names every file.
 
-**For a second opinion, use `/agy:second-opinion`, not a tier.** `--via claude`
+**For a second opinion, use `/agy-bridge:second-opinion`, not a tier.** `--via claude`
 runs a real Claude Code that can search, on the user's Claude plan; `--via agy`
 runs Opus inside `agy`, on the Google plan. The profile picks one when neither
 is given.
@@ -134,7 +137,7 @@ is given.
   and where is the port configured" does not.
 - **Never put secrets on stdin or in the prompt** — `.env` values, tokens, real
   user data from logs. They go to Google. The wrapper's guard tells the model to
-  skip `.env` files other than `.env.example`, and `/agy:review` strips them from
+  skip `.env` files other than `.env.example`, and `/agy-bridge:review` strips them from
   the diff, but what you pipe in is on you.
 
 ## Long context goes on stdin

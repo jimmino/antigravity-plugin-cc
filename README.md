@@ -1,4 +1,4 @@
-# agy — Antigravity CLI plugin for Claude Code
+# agy-bridge — Antigravity CLI plugin for Claude Code
 
 Use Google's [Antigravity CLI (`agy`)](https://antigravity.google/) from
 inside Claude Code. Delegate tasks, run quick prompts, offload bulk reads, or
@@ -13,54 +13,54 @@ just Bash and `agy`.
 
 ## What you get
 
-- **`/agy:setup`** — verify `agy` is installed and authenticated; can install
+- **`/agy-bridge:setup`** — verify `agy` is installed and authenticated; can install
   it for you if it is missing.
-- **`/agy:models [--refresh]`** — list the models your `agy` build actually
+- **`/agy-bridge:models [--refresh]`** — list the models your `agy` build actually
   offers right now, plus the alias mapping.
-- **`/agy:ask [--model <m>] [--effort <e>] <prompt>`** — one-shot prompt
+- **`/agy-bridge:ask [--model <m>] [--effort <e>] <prompt>`** — one-shot prompt
   through `agy -p`; returns the raw response.
-- **`/agy:delegate [--background] [--model <m>] [--effort <e>] <task>`** — hand
+- **`/agy-bridge:delegate [--background] [--model <m>] [--effort <e>] <task>`** — hand
   a task to `agy`. `--background` for long jobs.
-- **`/agy:research [--background] [--model <m>] [--effort <e>] <topic>`** —
+- **`/agy-bridge:research [--background] [--model <m>] [--effort <e>] <topic>`** —
   delegate a deep-research investigation; wraps the topic in a structured
   prompt.
-- **`/agy:image <description>`** — generate an image with `agy`'s built-in
+- **`/agy-bridge:image <description>`** — generate an image with `agy`'s built-in
   `generate_image` tool (Imagen under the hood). Optional `--name` and
   `--output`.
-- **`/agy:review [--model <m>] [focus]`** — ask Antigravity to review your
+- **`/agy-bridge:review [--model <m>] [focus]`** — ask Antigravity to review your
   current `git diff`, read-only, with the diff piped in as a context file.
-- **`/agy:offload [--model <m>] [--dir <p>] [--add-dir <p>] <question>`** — a
+- **`/agy-bridge:offload [--model <m>] [--dir <p>] [--add-dir <p>] <question>`** — a
   read-only bulk read: `agy` reads the files, a short cited answer comes back,
   and the bulk tokens never enter your Claude Code context. Long context is
   piped in behind `--stdin`.
-- **`/agy:fanout (--jobs <f> | --prompt <t>...) [--throttle N]`** — several
+- **`/agy-bridge:fanout (--jobs <f> | --prompt <t>...) [--throttle N]`** — several
   offload jobs at once. Each call takes 1-3 minutes, so concurrency is the win.
-- **`/agy:second-opinion [--via claude|agy] [--model opus|sonnet|haiku] <question>`**
+- **`/agy-bridge:second-opinion [--via claude|agy] [--model opus|sonnet|haiku] <question>`**
   — an independent, read-only answer from Claude that has not seen your
   conversation: a fresh Claude Code (your Claude plan), or a Claude model
   inside `agy` (the Google plan).
-- **`/agy:profile [show|claude|gemini]`** — which model each command uses when
+- **`/agy-bridge:profile [show|claude|gemini]`** — which model each command uses when
   you give no `--model`. `claude` moves the work onto `agy`'s Claude models.
-- **`/agy:stats [--days N | --all]`** — runs and tokens per model, split
+- **`/agy-bridge:stats [--days N | --all]`** — runs and tokens per model, split
   between the Google plan and your Claude plan.
-- **`/agy:bridge [status|install|uninstall]`** — the other direction: `agy`
+- **`/agy-bridge:bridge [status|install|uninstall]`** — the other direction: `agy`
   drives and Claude Code does the work. Installs a launcher at a fixed path
   that `agy` can call, and an `ask-claude` skill that tells `agy` how.
   Read-only unless `agy` passes `--allow-write`.
-- **`/agy:help`** — show all commands and the live model/alias table.
-- **`agy:runner` subagent** — thin forwarding wrapper around the Antigravity
-  CLI; available as `subagent_type: "agy:runner"` for programmatic
+- **`/agy-bridge:help`** — show all commands and the live model/alias table.
+- **`agy-bridge:runner` subagent** — thin forwarding wrapper around the Antigravity
+  CLI; available as `subagent_type: "agy-bridge:runner"` for programmatic
   delegation.
-- **`agy:offload` subagent** — the read-only offload path, for delegating a
+- **`agy-bridge:offload` subagent** — the read-only offload path, for delegating a
   wide read without its output landing in the parent context.
-- **`agy:offloading` skill** — the doctrine behind the offload commands: what
+- **`agy-bridge:offloading` skill** — the doctrine behind the offload commands: what
   is worth offloading, how to shape the prompt, how far to trust the answer.
 
 ## Requirements
 
 - **Claude Code** with plugin-marketplace support
   (`/plugin marketplace add …`).
-- **Antigravity CLI (`agy`)** installed locally. `/agy:setup` can install it
+- **Antigravity CLI (`agy`)** installed locally. `/agy-bridge:setup` can install it
   on first run.
 - **Auth** for `agy`: either OAuth cached in the system keyring (after one
   interactive run of `agy`) or `ANTIGRAVITY_API_KEY` exported in your shell.
@@ -72,17 +72,23 @@ In Claude Code, run these three slash commands in order:
 
 ```text
 /plugin marketplace add jimmino/antigravity-plugin-cc
-/plugin install agy@antigravity-cc
+/plugin install agy-bridge@antigravity-cc
 /reload-plugins
 ```
+
+Upgrading from 0.9.x or older: the plugin was named `agy`, and its commands
+were `/agy:*`. Claude Code moves the install to `agy-bridge` on the next
+marketplace update. If it reports the plugin as not cached, run
+`/plugin install agy-bridge@antigravity-cc` once. If you use the bridge, run
+`/agy-bridge:bridge install` again.
 
 Then verify everything is wired up:
 
 ```text
-/agy:setup
+/agy-bridge:setup
 ```
 
-If `agy` is missing, `/agy:setup` offers to install it via the official
+If `agy` is missing, `/agy-bridge:setup` offers to install it via the official
 installer:
 
 ```bash
@@ -97,7 +103,7 @@ terminal to complete OAuth — or export `ANTIGRAVITY_API_KEY`.
 ### Ask a quick question
 
 ```text
-/agy:ask explain the difference between Go channels and Rust async in one paragraph
+/agy-bridge:ask explain the difference between Go channels and Rust async in one paragraph
 ```
 
 Returns Antigravity's response verbatim.
@@ -105,14 +111,14 @@ Returns Antigravity's response verbatim.
 ### Delegate a task
 
 ```text
-/agy:delegate refactor the SQL queries in src/db/queries.go to use prepared statements
+/agy-bridge:delegate refactor the SQL queries in src/db/queries.go to use prepared statements
 ```
 
 For long tasks, run in the background and let Claude Code notify you when it
 finishes:
 
 ```text
-/agy:delegate --background investigate why integration tests are flaky in CI
+/agy-bridge:delegate --background investigate why integration tests are flaky in CI
 ```
 
 You can also delegate by talking to Claude:
@@ -121,16 +127,16 @@ You can also delegate by talking to Claude:
 Ask agy to look at this file and suggest a simpler design.
 ```
 
-Claude can route that through the `agy:runner` subagent on its own. The
-subagent runs on Haiku, because all it does is make one wrapper call.
+Claude runs the same wrapper call `/agy-bridge:delegate` makes, with no forwarding
+subagent in between, so the hand-off spends no extra Claude tokens.
 
 ### Review the current diff
 
 Stage or make some changes, then:
 
 ```text
-/agy:review
-/agy:review focus on error handling and concurrency safety
+/agy-bridge:review
+/agy-bridge:review focus on error handling and concurrency safety
 ```
 
 ### Offload a bulk read
@@ -139,8 +145,8 @@ When the question spans more source than is worth pulling into your context,
 hand the reading to `agy` and get back a short cited answer:
 
 ```text
-/agy:offload where is OTP expiry enforced, and what happens when it lapses
-/agy:offload --model fast --dir C:/Data/App/api which handlers write to the audit log
+/agy-bridge:offload where is OTP expiry enforced, and what happens when it lapses
+/agy-bridge:offload --model fast --dir C:/Data/App/api which handlers write to the audit log
 ```
 
 The answer arrives with a telemetry line on stderr naming the model, the
@@ -159,14 +165,14 @@ git --no-pager diff HEAD -- src/api |   bash plugins/agy/scripts/agy-run.sh offl
 The one rule: **offload semantics, never arithmetic.** The run is read-only,
 which means no shell, and without a shell the model cannot count, sum, diff or
 list a directory — it will spend six figures of tokens discovering that. Do
-those yourself. The `agy:offloading` skill has the measurements.
+those yourself. The `agy-bridge:offloading` skill has the measurements.
 
 ### Fan several offloads out at once
 
 Each call takes 1-3 minutes, so run them concurrently:
 
 ```text
-/agy:fanout --prompt "where is auth handled" --prompt "where is rate limiting"
+/agy-bridge:fanout --prompt "where is auth handled" --prompt "where is rate limiting"
 ```
 
 Per-job directories and models go in a jobs file:
@@ -181,7 +187,7 @@ Per-job directories and models go in a jobs file:
 ### Get an independent second opinion
 
 ```text
-/agy:second-opinion why does the retry loop in src/sync.ts deadlock
+/agy-bridge:second-opinion why does the retry loop in src/sync.ts deadlock
 ```
 
 This one does not go through `agy` at all: it runs a fresh Claude Code headless
@@ -196,7 +202,7 @@ you have not vetted would run its hooks and its `.mcp.json` servers.
 Through `agy` instead, it spends none of your Claude plan:
 
 ```text
-/agy:second-opinion --via agy why does the retry loop in src/sync.ts deadlock
+/agy-bridge:second-opinion --via agy why does the retry loop in src/sync.ts deadlock
 ```
 
 That runs Opus inside `agy` on the read-only offload path. It has only a file
@@ -210,16 +216,16 @@ them, so it spends the Google plan's quota instead of your Claude
 subscription:
 
 ```text
-/agy:profile claude
+/agy-bridge:profile claude
 ```
 
 | Command | `gemini` profile (default) | `claude` profile |
 |---|---|---|
-| `/agy:offload`, `/agy:fanout` | `balanced` (Flash) | `sonnet` inside `agy` |
-| `/agy:review` | `balanced` | `opus` inside `agy` |
-| `/agy:ask`, `/agy:delegate` | `agy`'s own default | `sonnet` inside `agy` |
-| `/agy:research` | `agy`'s own default | `opus` inside `agy` |
-| `/agy:second-opinion` | `opus` through `claude -p` | `opus` inside `agy` |
+| `/agy-bridge:offload`, `/agy-bridge:fanout` | `balanced` (Flash) | `sonnet` inside `agy` |
+| `/agy-bridge:review` | `balanced` | `opus` inside `agy` |
+| `/agy-bridge:ask`, `/agy-bridge:delegate` | `agy`'s own default | `sonnet` inside `agy` |
+| `/agy-bridge:research` | `agy`'s own default | `opus` inside `agy` |
+| `/agy-bridge:second-opinion` | `opus` through `claude -p` | `opus` inside `agy` |
 
 An explicit `--model` always wins. Per-task overrides go in
 `~/.config/agy-plugin/config` (see [`examples/config`](examples/config)):
@@ -232,7 +238,7 @@ second-opinion.via = claude
 
 When a Claude model runs out of capacity or quota, the offload path tries the
 other Claude family, then Pro, then Flash, and says so. It never falls back to
-the `claude` CLI. `/agy:stats` shows how the work split between the two plans.
+the `claude` CLI. `/agy-bridge:stats` shows how the work split between the two plans.
 
 What it cannot do:
 
@@ -249,7 +255,7 @@ What it cannot do:
   the `agy` CLI as Google ships it.
 
 The biggest saving is to swap roles: use the `agy` TUI with Opus as your daily
-driver, and call Claude Code through `/agy:bridge` only for work that needs
+driver, and call Claude Code through `/agy-bridge:bridge` only for work that needs
 its own tools.
 
 ### Let agy hand tasks to Claude Code
@@ -259,7 +265,7 @@ Every command above has Claude Code driving `agy`. The reverse bridge lets
 answer back. Install it once from Claude Code:
 
 ```text
-/agy:bridge install
+/agy-bridge:bridge install
 ```
 
 That writes an `ask-claude` skill into `agy`'s machine-wide customization
@@ -289,17 +295,17 @@ pwsh -NoProfile -File C:\Users\you\.gemini\config\skills\ask-claude\scripts\ask-
   and `.mcp.json`. A Claude Code build without `--restricted` refuses to
   write at all.
 - **No repository hooks, either way.** Both modes load only your user
-  settings and no MCP servers, like `/agy:second-opinion`. A write mode makes
+  settings and no MCP servers, like `/agy-bridge:second-opinion`. A write mode makes
   that matter more: a hook would otherwise run inside the very folder Claude
   is changing.
 - **You decide what runs unattended.** `agy -p` denies every command no rule
-  allows. `/agy:bridge install` prints two rules for `permissions.allow` in
+  allows. `/agy-bridge:bridge install` prints two rules for `permissions.allow` in
   `~/.gemini/antigravity-cli/settings.json`. One ends in `--read-only`, the
   other in `--allow-write`, and because `agy` matches the start of the
   command, the read-only rule never covers a write run. Add only the first,
   and `agy` still asks you before each run that may change files.
 
-`/agy:bridge` on its own reports whether the bridge is installed, which plugin
+`/agy-bridge:bridge` on its own reports whether the bridge is installed, which plugin
 version the launcher reaches, and which of the two rules `agy` has. The
 standalone `claude` CLI must be signed in: if calls fail with an OAuth error,
 run `claude` once in a terminal.
@@ -307,10 +313,10 @@ run `claude` once in a terminal.
 ### Pick a specific model
 
 ```text
-/agy:delegate --model sonnet fix the off-by-one in pagination
-/agy:delegate --model deep write a high-coverage test for the cache layer
-/agy:ask --model opus "explain Go's escape analysis"
-/agy:ask --model fast --effort low "one-line summary of this error"
+/agy-bridge:delegate --model sonnet fix the off-by-one in pagination
+/agy-bridge:delegate --model deep write a high-coverage test for the cache layer
+/agy-bridge:ask --model opus "explain Go's escape analysis"
+/agy-bridge:ask --model fast --effort low "one-line summary of this error"
 ```
 
 **Nothing about the model catalogue is hardcoded.** `agy models` is the source
@@ -318,8 +324,8 @@ of truth; the plugin caches that list and resolves everything against it. See
 what you actually have:
 
 ```text
-/agy:models
-/agy:models --refresh
+/agy-bridge:models
+/agy-bridge:models --refresh
 ```
 
 `--model` accepts three kinds of value:
@@ -384,7 +390,7 @@ audit   = deep
 pinned  = gemini-3.1-pro-high
 ```
 
-Then `/agy:ask --model cheap …` works everywhere `--model` does. A user alias
+Then `/agy-bridge:ask --model cheap …` works everywhere `--model` does. A user alias
 shadows a built-in of the same name, so you can redefine `flash` if you
 disagree with the default.
 
@@ -395,19 +401,19 @@ prompts to a different model.
 ### Delegate a deep research investigation
 
 ```text
-/agy:research what's the current state of WebGPU support across browsers in 2026?
-/agy:research --background --model opus survey post-quantum signature schemes used in TLS
+/agy-bridge:research what's the current state of WebGPU support across browsers in 2026?
+/agy-bridge:research --background --model opus survey post-quantum signature schemes used in TLS
 ```
 
 The command wraps your topic in a research-oriented preamble (background,
-key findings, caveats, sources) and delegates to `agy:runner`. Long
+key findings, caveats, sources) and hands it to `agy` in one wrapper call. Long
 investigations work well in `--background`.
 
 ### Generate an image
 
 ```text
-/agy:image a minimalist dark-mode login mockup, blue accent color
-/agy:image --name hero --output ./assets/hero.png isometric illustration of a developer at a desk
+/agy-bridge:image a minimalist dark-mode login mockup, blue accent color
+/agy-bridge:image --name hero --output ./assets/hero.png isometric illustration of a developer at a desk
 ```
 
 Triggers `agy`'s built-in `generate_image` tool. The image is written to
@@ -420,16 +426,17 @@ you want the wrapper to copy it next to your project.
 Under the hood, the plugin is a thin wrapper around your local `agy` install:
 
 ```
-Claude Code  →  /agy:*  →  agy:runner subagent  →  agy-run.sh  →  agy -p "..."
+Claude Code  →  /agy:*  →  agy-run.sh  →  agy -p "..."
+Claude Code  →  agy-bridge:runner subagent  →  agy-run.sh  →  agy -p "..."   (programmatic callers)
 ```
 
 The offload commands take a second path through the same wrapper:
 
 ```
-/agy:offload      →  agy-run.sh offload  →  agy --mode plan --output-format json
-/agy:fanout       →  N x the above, in parallel
-/agy:review       →  the working diff, piped in as a context file
-/agy:second-opinion  →  claude -p --permission-mode plan --tools Read,Grep,Glob
+/agy-bridge:offload      →  agy-run.sh offload  →  agy --mode plan --output-format json
+/agy-bridge:fanout       →  N x the above, in parallel
+/agy-bridge:review       →  the working diff, piped in as a context file
+/agy-bridge:second-opinion  →  claude -p --permission-mode plan --tools Read,Grep,Glob
                          --setting-sources user --strict-mcp-config
 ```
 
@@ -445,13 +452,13 @@ agy  →  ~/.gemini/config/skills/ask-claude/scripts/ask-claude(.ps1)
 - The wrapper script
   ([`plugins/agy/scripts/agy-run.sh`](./plugins/agy/scripts/agy-run.sh))
   handles binary discovery, auth detection, and exit codes.
-- The `agy:runner` subagent is a *forwarder*: it invokes the wrapper exactly
+- The `agy-bridge:runner` subagent is a *forwarder*: it invokes the wrapper exactly
   once per request and returns Antigravity's output verbatim. No
   reinterpretation.
 
 ### The offload path
 
-`/agy:ask` is a plain pass-through. The offload commands are not: they
+`/agy-bridge:ask` is a plain pass-through. The offload commands are not: they
 
 - run `agy --mode plan` with slash commands disabled, so the model **cannot
   write files or run commands** even in a folder `agy` is trusted in. On a build
@@ -484,13 +491,13 @@ workspaces) in `~/.gemini/antigravity-cli/settings.json`. Project-local
 doesn't override or shadow any of that — drop config files where `agy`
 expects them and they'll be picked up.
 
-The `--model` flag on `/agy:ask`, `/agy:delegate`, `/agy:research` and
-`/agy:review` is passed through to `agy --model`, which applies to that one
+The `--model` flag on `/agy-bridge:ask`, `/agy-bridge:delegate`, `/agy-bridge:research` and
+`/agy-bridge:review` is passed through to `agy --model`, which applies to that one
 call only. Your saved default is never rewritten.
 
 On `agy` builds old enough to predate the `--model` flag, the wrapper falls
 back to temporarily patching the `model` field in `settings.json` under a
-lock, restoring it on exit (including on `SIGINT`/`SIGTERM`). `/agy:setup`
+lock, restoring it on exit (including on `SIGINT`/`SIGTERM`). `/agy-bridge:setup`
 reports which path your build uses via `nativeModelFlag`. Run `agy update`
 to get the clean one.
 
@@ -511,9 +518,9 @@ to get the clean one.
 | `AGY_LOCK_WAIT_SECONDS` | `600` | Legacy path only: how long to wait for the settings lock. |
 | `AGY_OFFLOAD_BUDGET` | `540` | Seconds for a whole offload, retries included. |
 | `AGY_OFFLOAD_MIN_ATTEMPT` | `120` | Do not start another attempt with less budget left than this. |
-| `AGY_SECOND_OPINION_TIMEOUT` | `540` | Seconds before `/agy:second-opinion` gives up. |
+| `AGY_SECOND_OPINION_TIMEOUT` | `540` | Seconds before `/agy-bridge:second-opinion` gives up. |
 | `AGY_ASK_CLAUDE_TIMEOUT` | `900` | Seconds before a bridge call from `agy` gives up. `agy` is the caller, so Claude Code's 600-second tool limit does not apply. |
-| `AGY_BRIDGE_DIR` | `~/.gemini/config/skills/ask-claude` | Where `/agy:bridge install` puts the `ask-claude` skill and its launcher. |
+| `AGY_BRIDGE_DIR` | `~/.gemini/config/skills/ask-claude` | Where `/agy-bridge:bridge install` puts the `ask-claude` skill and its launcher. |
 | `AGY_RUN_SH` | unset | Makes the bridge launcher run this `agy-run.sh` instead of the installed plugin's. For development. |
 | `AGY_BRIDGE_BASH` | Git for Windows' `bin\bash.exe` | Windows only: the bash that `ask-claude.ps1` starts. |
 
@@ -546,7 +553,7 @@ Standard/Enterprise, or an enterprise GCP project. See the
 
 No. The plugin runs `agy` locally over a Bash wrapper. The wrapper only reads
 filesystem paths and your shell environment, and apart from `agy` itself it
-starts only your local `claude`, for `/agy:second-opinion` and the reverse
+starts only your local `claude`, for `/agy-bridge:second-opinion` and the reverse
 bridge. Your prompts go to Google through `agy`'s normal channels, and to
 Anthropic through `claude`'s.
 
@@ -561,11 +568,11 @@ than a fixed version — without it, "newest Pro" would be unauditable.
 Yes — the plugin uses your local install. Running `agy` directly in a
 terminal keeps working exactly as before.
 
-### Why do `/agy:delegate` and `/agy:research` not use a subagent?
+### Why do `/agy-bridge:delegate` and `/agy-bridge:research` not use a subagent?
 
 They did, up to 0.8.0. A subagent that only forwards one wrapper call spends
 Claude tokens for nothing, and a Bash call with `run_in_background` reports
-back when it finishes just as well. The `agy:runner` and `agy:offload`
+back when it finishes just as well. The `agy-bridge:runner` and `agy-bridge:offload`
 subagents remain for Claude to pick on its own, and they run on Haiku.
 
 ## Inspiration

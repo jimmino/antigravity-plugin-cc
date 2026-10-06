@@ -1,0 +1,109 @@
+schema_version: "1.0"
+name: positive-wide-map
+description: >
+  Positive control: a wide semantic read over ~1 MB of interconnected code
+  is where offloading pays, so the suite does not reward never offloading.
+  110 segment modules each register their own route, auth policy and
+  sometimes a job through src/platform/, so the map cannot come from a few
+  files. Also grades the prompt Claude writes. Origin: the AIUcto loop of
+  2026-09-19, where a line cap, "plain text, no markdown" and "cite where it
+  is DEFINED" moved exact citations from 13/16 to 20/20 and halved the
+  returned answer (1 230 -> 585 tokens); and the 2026-09-24 MeetApp review,
+  whose unbounded prompt came back as 53 691 output tokens of headings.
+tags: [positive, prompt-shape, field, mock]
+runs: 3
+context:
+  scaffold_script: scaffold.sh
+execution:
+  max_turns: 30
+  timeout_seconds: 900
+  # The agy-bridge:offload subagent's own tool calls appear in the trace, so the
+  # prompt it writes is graded the same way.
+  allowed_tools: [Bash, Read, Grep, Glob, Skill, Agent]
+  env:
+    EVAL_FAKE_AGY_RESPONSE: |-
+      ENTRY | src/server.ts:12 | app.listen on config.port (src/config.ts:5)
+      ROUTES | src/server.ts:9 | registers the users, orders and admin routes
+      SEGMENTS | src/platform/boot.ts:11 | mounts every segment route behind the preHandler for its auth policy
+      AUTH | src/platform/policies.ts:14 | public routes get no preHandler; session routes verify the session; admin routes also require ADMIN_USER_IDS
+      AUTH | src/auth/session.ts:40 | verifySession checks the signature, then the expiry
+      DATA | src/db/client.ts:8 | single pg Pool; segment modules query through runSql (src/db/queries.ts:44)
+      JOBS | src/platform/scheduler.ts:8 | segment jobs run on setInterval inside every API process
+      JOBS | src/jobs/cleanup.ts:15 | runCleanup deletes abandoned carts and expired reset tokens
+    EVAL_FAKE_AGY_IN: "296000"
+    EVAL_FAKE_AGY_OUT: "6100"
+  prompt: |
+    Map this backend's architecture for me: entry point, request flow, data
+    layer, background jobs and auth, including how the ~110 segment modules
+    under src/modules plug in. Give path:line pointers. Don't pull the whole
+    tree into your own context.
+graders:
+  - type: tool_used
+    name: offloaded-once
+    tool: Bash
+    input_match: 'agy-run\.sh[\\"'']*\s+offload'
+    min: 1
+    max: 2
+    weight: 3
+  # Doctrine loaded before the offload: either the Skill call, or the
+  # agy-bridge:offload subagent, whose definition preloads the offloading skill.
+  - type: regex
+    name: doctrine-before-offload
+    target: trace
+    pattern: '("name":"Skill","input":\{"skill":"agy-bridge:offloading"|"subagent_type":"agy-bridge:offload")[\s\S]*"command":"(?:[^"\\]|\\.)*agy-run\.sh(?:[^"\\]|\\.)*offload'
+    weight: 2
+    arm: with-only
+  - type: tool_used
+    name: answer-bounded
+    tool: Bash
+    input_match: 'agy-run\.sh[\\"'']*\s+offload[\s\S]*([Aa]t most \d+|[Nn]o more than \d+|[Mm]ax(imum)? (of )?\d+|[Uu]p to \d+ lines|\d+ lines|[Oo]ne line (per|for each|each))'
+    min: 1
+    weight: 2
+  - type: tool_used
+    name: markup-banned
+    tool: Bash
+    input_match: 'agy-run\.sh[\\"'']*\s+offload[\s\S]*([Nn]o markdown|[Pp]lain text|[Nn]o bold)'
+    min: 1
+    weight: 2
+  - type: tool_used
+    name: vendored-skipped
+    tool: Bash
+    input_match: 'agy-run\.sh[\\"'']*\s+offload[\s\S]*node_modules'
+    min: 1
+    weight: 1
+  - type: tool_used
+    name: citations-anchored
+    tool: Bash
+    input_match: 'agy-run\.sh[\\"'']*\s+offload[\s\S]*([Dd]efin|DEFIN|[Ii]mplement|IMPLEMENT)'
+    min: 1
+    weight: 1
+  # The judge sees only the first and last ~10k characters of a trace, so
+  # "checked the citations after the answer" is a regex over the full trace:
+  # an offload call followed by a Read, sed, grep or cat of a cited file.
+  - type: regex
+    name: verified-after-offload
+    target: trace
+    pattern: '"command":"(?:[^"\\]|\\.)*agy-run\.sh(?:[^"\\]|\\.)*offload[\s\S]*("name":"Read","input":\{"file_path":"[^"]*(server|config|boot|policies|session|client|queries|scheduler|cleanup)\.ts|"command":"(?=(?:[^"\\]|\\.)*\b(sed|grep|cat|head|nl|awk)\b)(?=(?:[^"\\]|\\.)*(server|config|boot|policies|session|client|queries|scheduler|cleanup)\.ts))'
+    weight: 2
+  - type: regex
+    name: entry-point-cited
+    target: last_message
+    # Matches "src/server.ts:12" and "src/server.ts:8 ... listening at :12".
+    pattern: 'server\.ts[^\n]{0,160}:1[12]\b'
+    weight: 1
+  - type: llm
+    name: map-covers-segments
+    focus: last_message
+    weight: 2
+    criteria: |
+      PASS if the map explains how the segment modules plug in: each module
+      registers its route (and sometimes a job) with src/platform/registry,
+      src/platform/boot.ts mounts the routes behind a preHandler chosen by
+      the route's auth policy (public: none; session: valid session;
+      admin: session plus ADMIN_USER_IDS), and segment jobs run on
+      setInterval inside the API process. It must also give the entry point
+      (src/server.ts) and the data layer (src/db/client.ts pool).
+      FAIL if the segment mechanism is missing or invented.
+expected_outcome: >
+  Loads the doctrine, makes one bounded, markup-free, citation-anchored
+  offload that skips node_modules, spot-checks the citations, then answers.

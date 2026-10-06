@@ -4,7 +4,7 @@
 #   (or set AGY_CONFIG_FILE to point somewhere else)
 #
 # Same format as aliases.conf: `key = value`, one per line, `#` starts a
-# comment. `/agy:profile claude` and `/agy:profile gemini` rewrite only the
+# comment. `/agy-bridge:profile claude` and `/agy-bridge:profile gemini` rewrite only the
 # `profile` line and keep the rest.
 #
 # Like aliases.conf, this file is read from your user config only — never from
@@ -30,7 +30,7 @@ profile = claude
 # default.research = deep             # Gemini Pro instead of Opus
 
 # -------------------------------------------------------- second opinion ---
-# Which runner /agy:second-opinion uses when --via is not given:
+# Which runner /agy-bridge:second-opinion uses when --via is not given:
 #   claude  a fresh Claude Code (can search; your Claude plan)
 #   agy     a Claude model inside agy (file map only; the Google plan)
 # default.second-opinion names the model for `agy`. `claude` always uses opus

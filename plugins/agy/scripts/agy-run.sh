@@ -797,7 +797,7 @@ cmd_models() {
   if [ -z "$out" ]; then
     echo "error: no model catalogue available." >&2
     echo "       agy may not be installed, may be offline, or may predate the" >&2
-    echo "       \`models\` subcommand. Run /agy:setup to check." >&2
+    echo "       \`models\` subcommand. Run /agy-bridge:setup to check." >&2
     exit 1
   fi
   if [ "$ids_only" = "1" ]; then
@@ -1829,7 +1829,7 @@ cmd_offload() {
   # which in a folder agy already trusts means it can edit files and shell out.
   if ! agy_supports_mode_flag; then
     echo "error: this agy build has no --mode flag, so an offload cannot be held read-only." >&2
-    echo "       run \`agy update\`, or use /agy:ask if a read-write run is acceptable." >&2
+    echo "       run \`agy update\`, or use /agy-bridge:ask if a read-write run is acceptable." >&2
     exit 1
   fi
 
@@ -2857,7 +2857,7 @@ cmd_bridge_uninstall() {
 
 cmd_bridge_status() {
   if [ ! -f "$AGY_BRIDGE_DIR/scripts/ask-claude" ]; then
-    echo "The agy -> Claude Code bridge is not installed. Install it with /agy:bridge install."
+    echo "The agy -> Claude Code bridge is not installed. Install it with /agy-bridge:bridge install."
     return 1
   fi
   echo "Installed in $(_native_path "$AGY_BRIDGE_DIR")"
@@ -2966,7 +2966,7 @@ cmd_profile() {
       if [ "$action" = "claude" ]; then
         catalogue_load
         if [ -n "$(catalogue)" ] && ! catalogue_ids | grep -qi 'claude'; then
-          echo "warning: the agy catalogue lists no Claude model. Check your plan with /agy:models." >&2
+          echo "warning: the agy catalogue lists no Claude model. Check your plan with /agy-bridge:models." >&2
         fi
       fi
       echo
@@ -2984,35 +2984,35 @@ cmd_help() {
 /agy:* commands (Claude Code plugin for the Antigravity CLI)
 
 Slash commands
-  /agy:setup                            Verify agy install + auth. Offers install if missing.
-  /agy:models [--refresh]               List the models agy currently offers.
-  /agy:ask [--model M] [--effort E] <prompt>
+  /agy-bridge:setup                            Verify agy install + auth. Offers install if missing.
+  /agy-bridge:models [--refresh]               List the models agy currently offers.
+  /agy-bridge:ask [--model M] [--effort E] <prompt>
                                         One-shot prompt; returns agy's response verbatim.
-  /agy:offload [--model M] [--dir D] [--add-dir D]... <question>
+  /agy-bridge:offload [--model M] [--dir D] [--add-dir D]... <question>
                                         Read-only bulk read: agy reads the files, a short
                                         cited answer comes back. Long context on stdin.
-  /agy:fanout (--jobs F | --prompt P...) [--throttle N]
+  /agy-bridge:fanout (--jobs F | --prompt P...) [--throttle N]
                                         Several offload jobs in parallel.
-  /agy:second-opinion [--via claude|agy] [--model opus|sonnet|haiku] <question>
+  /agy-bridge:second-opinion [--via claude|agy] [--model opus|sonnet|haiku] <question>
                                         Independent read-only Claude opinion: a fresh
                                         Claude Code (your Claude plan) or a Claude model
                                         inside agy (the Google plan).
-  /agy:profile [show|claude|gemini]     Which model each task uses by default. `claude`
+  /agy-bridge:profile [show|claude|gemini]     Which model each task uses by default. `claude`
                                         runs the work on agy's Claude models, so it uses
                                         the Google plan's quota, not your Claude plan.
-  /agy:stats [--days N | --all]         Runs and tokens per model: Google plan vs Claude plan.
-  /agy:bridge [status|install|uninstall]
+  /agy-bridge:stats [--days N | --all]         Runs and tokens per model: Google plan vs Claude plan.
+  /agy-bridge:bridge [status|install|uninstall]
                                         Let agy hand tasks to Claude Code: a launcher at a
                                         fixed path, offered to agy as its ask-claude skill.
-  /agy:delegate [--background] [--model M] [--effort E] <task>
-                                        Hand a task to the agy:runner subagent.
-  /agy:research [--background] [--model M] [--effort E] <topic>
-                                        Deep-research investigation via agy:runner.
-  /agy:review [--model M] [--effort E] [focus] [-- paths...]
+  /agy-bridge:delegate [--background] [--model M] [--effort E] <task>
+                                        Hand a task to the agy-bridge:runner subagent.
+  /agy-bridge:research [--background] [--model M] [--effort E] <topic>
+                                        Deep-research investigation via agy-bridge:runner.
+  /agy-bridge:review [--model M] [--effort E] [focus] [-- paths...]
                                         Review the working diff (runs through offload).
-  /agy:image [--name S] [--output P] <description>
+  /agy-bridge:image [--name S] [--output P] <description>
                                         Generate an image via agy's built-in tool.
-  /agy:help                             This help.
+  /agy-bridge:help                             This help.
 
 Model selection (--model / --effort)
 HELP
@@ -3026,7 +3026,7 @@ Defining your own aliases
       # name = target (a model id, a display name, or another alias)
       cheap   = flash-low
       review  = deep
-      pinned  = <an exact id from /agy:models>
+      pinned  = <an exact id from /agy-bridge:models>
 
   Aliases are read from your user config only — never from the repository you
   have checked out — so a project cannot silently redirect your prompts.
@@ -3035,7 +3035,7 @@ How --model works
   \`agy models\` is the source of truth. The wrapper caches that list for
   ${AGY_MODELS_CACHE_TTL}s in
   ${AGY_MODELS_CACHE}
-  (refresh with \`/agy:models --refresh\`), resolves aliases against it, and
+  (refresh with \`/agy-bridge:models --refresh\`), resolves aliases against it, and
   passes the resulting model id to \`agy --model\`. Built-in aliases name a
   *family and effort*, not a version, so when Google ships a newer Flash or
   Pro, \`flash\` and \`pro\` follow it with no plugin update.
@@ -3076,17 +3076,17 @@ Profiles (which model a task uses without --model)
                     the Google plan's quota. A Claude model that runs out of
                     capacity falls back to the other Claude family, then Pro, then
                     Flash, and never to the claude CLI.
-  Set it with /agy:profile, or AGY_PROFILE for one shell. Per-task overrides
+  Set it with /agy-bridge:profile, or AGY_PROFILE for one shell. Per-task overrides
   (default.<task> = <alias>) and second-opinion.via go in
   ${AGY_CONFIG_FILE}
 
 Usage ledger
   Each agy and claude run adds one line to ${AGY_LEDGER_FILE}:
   time, model, seconds, tokens, outcome. Never a prompt or an answer.
-  /agy:stats sums it. AGY_LEDGER=0 turns it off.
+  /agy-bridge:stats sums it. AGY_LEDGER=0 turns it off.
 
 The reverse bridge (agy drives Claude Code)
-  \`/agy:bridge install\` writes a launcher that agy calls at a fixed path:
+  \`/agy-bridge:bridge install\` writes a launcher that agy calls at a fixed path:
   ${AGY_BRIDGE_DIR}/scripts/ask-claude
   It runs \`agy-run.sh ask-claude\` from whichever plugin version is installed:
   a fresh Claude Code, headless, that only reads and searches. With

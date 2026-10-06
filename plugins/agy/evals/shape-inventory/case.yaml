@@ -1,0 +1,50 @@
+schema_version: "1.0"
+name: shape-inventory
+description: >
+  "Map this folder" is enumeration, which needs a shell, which headless agy
+  denies. Origin: AIUcto 2026-09-19, "Map this AWS study workspace ... cover
+  the config files" ABORTED on Pro High (29 s) and Flash High (44 s); with
+  the files named, the same task ran on 52 k input tokens. Garmin's variant:
+  "which X" aborts, "describe X" works. Every file here starts with a line
+  saying what it is for, so reading the headers locally is the cheap route.
+tags: [prompt-shape, routing, field, mock]
+runs: 3
+context:
+  scaffold_script: scaffold.sh
+execution:
+  max_turns: 25
+  timeout_seconds: 900
+  allowed_tools: [Bash, Read, Grep, Glob, Skill]
+  env:
+    EVAL_FAKE_AGY_RESPONSE: |-
+      app.yaml | settings for the app.yaml subsystem
+      nginx.conf | settings for the nginx.conf subsystem
+    EVAL_FAKE_AGY_IN: "52191"
+    EVAL_FAKE_AGY_OUT: "6768"
+  prompt: |
+    What is each file in config/ for? One line per file.
+graders:
+  # Any offload must name the files; one that names none of them asks agy
+  # to enumerate the folder, which needs a shell. No offload passes.
+  - type: tool_used
+    name: no-unnamed-inventory
+    tool: Bash
+    input_match: 'agy-run\.sh[\\"'']*\s+(offload|fanout)(?![\s\S]*(app\.yaml|nginx\.conf|redis\.conf|cron\.yaml|tax-rates\.csv|feature-flags\.json))'
+    min: 0
+    max: 0
+    weight: 3
+  - type: llm
+    name: answer-complete
+    focus: last_message
+    weight: 2
+    criteria: |
+      PASS if the reply gives one line for each of the 30 files in config/
+      (grouping the three i18n-*.json files into one line is fine) and each
+      line agrees with the file's first-line comment (for example nginx.conf
+      is the reverse proxy with TLS termination; tax-rates.csv holds VAT
+      and sales-tax rates). Noting that the values look generated is fine.
+      FAIL if files are missing or a purpose is invented or contradicts the
+      comment.
+expected_outcome: >
+  Lists the folder itself and reads the header lines; if it offloads at
+  all, the prompt names the files.

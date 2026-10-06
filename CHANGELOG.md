@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-06
+
+### Changed
+- **The plugin is now `agy-bridge`, and its commands are `/agy-bridge:*`.**
+  The old name `agy` was the upstream plugin's name too, and Anthropic's
+  plugin directory holds a fork that reuses its upstream's name for review.
+  The subagents are `agy-bridge:runner` and `agy-bridge:offload`, and the
+  skill is `agy-bridge:offloading`. `marketplace.json` maps `agy` to
+  `agy-bridge` in `renames`, so Claude Code moves an existing install and its
+  `enabledPlugins` key to the new name. Run
+  `/plugin install agy-bridge@antigravity-cc` once if Claude Code reports the
+  plugin as not cached. The `agy` CLI, the wrapper and every setting under
+  `~/.config/agy-plugin` keep their names.
+- **The bridge launcher finds the plugin under either name**, `agy-bridge`
+  first. A launcher installed before 0.10.0 looks only for `agy`, so run
+  `/agy-bridge:bridge install` once after the update.
+
+### Added
+- **A README for the plugin listing.** `plugins/agy/README.md` now describes
+  the plugin for people who install it and lists what it runs, where data
+  goes and which files it writes. The contributor notes it held moved to
+  `ARCHITECTURE.md`.
+- **License and links in `plugin.json`**: `license`, `homepage`,
+  `repository` and `keywords`, plus a `LICENSE` copy in the plugin folder.
+- **The offloading eval suite** in `plugins/agy/evals/`, for
+  `claude plugin eval`. Its `results/` folder is git-ignored.
+
+### Fixed
+- **Prompt files caught up with the 0.9.0 profiles.** The `agy:offload`
+  subagent, the `offloading` skill and `/agy:review` still called `balanced`
+  the default; they now say the profile decides (`balanced` under `gemini`,
+  `sonnet` for offload and `opus` for review under `claude`). The
+  `antigravity-cli` skill named the subagent `agy`; it is `agy:runner`.
+- **`agy:runner` no longer triggers proactively.** Its description told
+  Claude to route hand-offs through it, while `/agy:delegate` says a
+  forward-only subagent spends Claude tokens for nothing. The subagent is now
+  for callers that ask for it by name or cannot run a slash command; plain
+  "ask agy" requests go to `/agy:delegate`. README and the site no longer
+  show delegate and research going through the subagent.
+
 ## [0.9.0] - 2026-10-05
 
 ### Added

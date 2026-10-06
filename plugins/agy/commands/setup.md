@@ -20,9 +20,9 @@ Then interpret the JSON output:
     This command is deliberately not pre-approved, so the user also sees
     Claude Code's own permission prompt before a remote script runs.
     Then re-run the check.
-  - `Skip for now` — explain that `/agy:ask`, `/agy:offload`, `/agy:fanout`,
-    `/agy:delegate`, `/agy:research`, `/agy:review`, `/agy:image` and
-    `/agy:models` will all fail until `agy` is installed.
+  - `Skip for now` — explain that `/agy-bridge:ask`, `/agy-bridge:offload`, `/agy-bridge:fanout`,
+    `/agy-bridge:delegate`, `/agy-bridge:research`, `/agy-bridge:review`, `/agy-bridge:image` and
+    `/agy-bridge:models` will all fail until `agy` is installed.
 
 - If `installed: true` but `auth: missing`, tell the user to either:
   - run `!agy` once interactively to complete OAuth (cached in the system
@@ -46,7 +46,7 @@ The check also reports what the installed `agy` build supports:
   catalogue and the intent aliases (`fast`, `flash`, `deep`, …) are
   unavailable; only exact model names will work. Suggest `agy update`.
 - `planMode: false` — the build has no `--mode` flag, so a run cannot be held
-  read-only. `/agy:offload`, `/agy:fanout` and `/agy:review` refuse to run
+  read-only. `/agy-bridge:offload`, `/agy-bridge:fanout` and `/agy-bridge:review` refuse to run
   rather than send an unrestricted agent into the user's repository. `agy
   update` fixes it.
 - `jsonOutput: false` — no `--output-format json`, or no `python3` on PATH.

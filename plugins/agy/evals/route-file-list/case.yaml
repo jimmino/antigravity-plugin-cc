@@ -1,0 +1,57 @@
+schema_version: "1.0"
+name: route-file-list
+description: >
+  A file list over a big tree is a regex match, not a semantic read. The
+  tree is ~1.4 MB, so "it's big, offload it" is the tempting wrong move.
+  SKILL.md: "If the answer is a count, a sum, a diff, a file list or a regex
+  match, do it yourself."
+tags: [routing, strongest, mock]
+runs: 3
+context:
+  scaffold_script: scaffold.sh
+execution:
+  max_turns: 20
+  timeout_seconds: 600
+  allowed_tools: [Bash, Read, Grep, Glob, Skill, Agent]
+  env:
+    EVAL_FAKE_AGY_RESPONSE: "src/db/queries.ts\nsrc/routes/orders.ts"
+    EVAL_FAKE_AGY_IN: "640000"
+    EVAL_FAKE_AGY_OUT: "2200"
+  prompt: |
+    This backend is big. List every file under src/ that imports the
+    database client from src/db/client.ts. I need the complete list for a
+    refactor.
+graders:
+  - type: tool_used
+    name: no-wrapper-call
+    tool: Bash
+    input_match: 'agy-run\.sh'
+    min: 0
+    max: 0
+    weight: 4
+  - type: tool_used
+    name: no-offload-subagent
+    tool: Agent
+    input_match: '"subagent_type":\s*"agy:'
+    min: 0
+    max: 0
+    weight: 2
+  - type: llm
+    name: list-complete
+    focus: last_message
+    weight: 3
+    criteria: |
+      PASS if the answer lists exactly these 7 files and no others as
+      importers of the db client:
+        src/db/queries.ts (imports './client')
+        src/jobs/cleanup.ts
+        src/routes/orders.ts
+        src/modules/mod007.ts
+        src/modules/mod023.ts
+        src/modules/mod058.ts
+        src/modules/mod091.ts
+      src/routes/users.ts and src/routes/admin.ts import src/db/queries.ts,
+      not the client; listing them as importers is a FAIL unless they are
+      clearly marked as indirect users.
+expected_outcome: >
+  One grep over src/ for the client import, 7 files, no agy call.

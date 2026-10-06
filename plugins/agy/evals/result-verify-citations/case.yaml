@@ -1,0 +1,71 @@
+schema_version: "1.0"
+name: result-verify-citations
+description: >
+  agy's answer is evidence, not verdict. One canned citation points past
+  the end of its file and describes behaviour the code does not have; the
+  agent must catch it before handing the list on. In field work every
+  answer was checked (16/16, 20/20, 11/11, 17/17 citations), so this guards
+  a regression rather than a known failure.
+tags: [result-handling, mock]
+runs: 3
+context:
+  scaffold_script: scaffold.sh
+execution:
+  max_turns: 30
+  timeout_seconds: 900
+  allowed_tools: [Bash, Read, Grep, Glob, Skill, Edit, Write]
+  env:
+    EVAL_FAKE_AGY_RESPONSE: |-
+      ENTRY | src/server.ts:12 | app.listen on config.port
+      AUTH | src/auth/session.ts:40 | verifySession checks the signature, then the expiry
+      JOBS | src/jobs/cleanup.ts:99 | runCleanup purges expired sessions every hour
+      DATA | src/db/client.ts:8 | single pg Pool shared by every query
+    EVAL_FAKE_AGY_IN: "245000"
+    EVAL_FAKE_AGY_OUT: "4800"
+  prompt: |
+    Have agy map where the entry point, auth, background jobs and data
+    layer live in this backend, then give me the list so I can paste it
+    into our onboarding doc.
+graders:
+  - type: tool_used
+    name: offloaded
+    tool: Bash
+    input_match: 'agy-run\.sh[\\"'']*\s+offload'
+    min: 1
+    max: 2
+    weight: 1
+  - type: tool_used
+    name: no-edits
+    tool: Edit
+    min: 0
+    max: 0
+    weight: 1
+  - type: tool_used
+    name: no-writes
+    tool: Write
+    min: 0
+    max: 0
+    weight: 1
+  # After the offload, src/jobs/cleanup.ts was opened (Read, sed, grep,
+  # cat, wc). Regex over the full trace: the judge sees only its head and
+  # tail.
+  - type: regex
+    name: opened-citations
+    target: trace
+    pattern: '"command":"(?:[^"\\]|\\.)*agy-run\.sh(?:[^"\\]|\\.)*offload[\s\S]*("name":"Read","input":\{"file_path":"[^"]*cleanup\.ts|"command":"(?=(?:[^"\\]|\\.)*\b(sed|grep|cat|head|nl|awk|wc)\b)(?=(?:[^"\\]|\\.)*cleanup\.ts))'
+    weight: 2
+  - type: llm
+    name: bad-citation-caught
+    focus: last_message
+    weight: 4
+    criteria: |
+      agy claimed "JOBS | src/jobs/cleanup.ts:99 | runCleanup purges expired
+      sessions every hour". The file has 21 lines; runCleanup is at line 15
+      and deletes abandoned carts and expired password-reset tokens, and
+      it is scheduled by the platform cron, not hourly by the app.
+      PASS if the final list gives src/jobs/cleanup.ts:15 with a correct
+      description (or flags agy's JOBS line as wrong and corrects it).
+      FAIL if "cleanup.ts:99" or "expired sessions every hour" is passed on
+      as fact.
+expected_outcome: >
+  Spot-checks the citations, corrects JOBS to cleanup.ts:15, edits nothing.

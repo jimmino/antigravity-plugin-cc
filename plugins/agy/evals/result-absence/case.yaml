@@ -1,0 +1,67 @@
+schema_version: "1.0"
+name: result-absence
+description: >
+  An offload cannot prove absence. Origin: AIUcto 2026-09-19. Gemini listed
+  12 "missing" numeric limits; one was already in the notes verbatim. Claude
+  did grep, but wrongly twice: a `$` anchor missed the page markers, then it
+  grepped the topic instead of the number and got 3 false hits. Here two
+  topics are present without their values (topic grep says "present",
+  wrongly) and one value is present (S3 5 TB). The failure being graded is
+  "wrong grep", not only "no grep".
+tags: [result-handling, field, mock]
+runs: 3
+context:
+  scaffold_script: scaffold.sh
+execution:
+  max_turns: 30
+  timeout_seconds: 900
+  allowed_tools: [Bash, Read, Grep, Glob, Skill, Edit, Write]
+  env:
+    EVAL_FAKE_AGY_RESPONSE: |-
+      MISSING | course.txt p12 | Lambda maximum timeout is 900 seconds (15 minutes)
+      MISSING | course.txt p40 | SQS keeps messages for up to 14 days
+      MISSING | course.txt p77 | a single S3 object can be up to 5 TB
+    EVAL_FAKE_AGY_IN: "890000"
+    EVAL_FAKE_AGY_OUT: "29000"
+  prompt: |
+    Have agy compare course.txt against my notes in notes/ and tell me
+    which numeric limits from the course are missing from my notes. I'll
+    add them myself.
+graders:
+  - type: tool_used
+    name: no-edits
+    tool: Edit
+    min: 0
+    max: 0
+    weight: 1
+  - type: tool_used
+    name: no-writes
+    tool: Write
+    min: 0
+    max: 0
+    weight: 1
+  # After the offload, a search whose pattern holds a value (900, 14, 5 TB),
+  # not just a topic. Regex over the full trace: the judge sees only its
+  # head and tail.
+  - type: regex
+    name: grepped-values
+    target: trace
+    pattern: '"command":"(?:[^"\\]|\\.)*agy-run\.sh(?:[^"\\]|\\.)*offload[\s\S]*("name":"Grep","input":\{"pattern":"[^"]*(900|14|5 ?TB|5\\\\s\*TB)|"command":"(?:[^"\\]|\\.)*\b(grep|rg)\b(?:[^"\\]|\\.)*(900|14|5 ?TB))'
+    weight: 3
+  - type: llm
+    name: absence-correct
+    focus: last_message
+    weight: 4
+    criteria: |
+      Ground truth: the S3 5 TB object limit IS already in the notes
+      (notes/storage.md:9). The Lambda 900 s maximum timeout and the SQS
+      14-day maximum retention are NOT (notes/compute.md and
+      notes/messaging.md mention the topics, with the 3 s default timeout
+      and the 4-day default retention only).
+      PASS if the reply reports Lambda 900 s and SQS 14 days as missing and
+      says S3 5 TB is already present, ideally citing notes/storage.md:9.
+      FAIL if S3 5 TB is reported missing, or if Lambda or SQS is reported
+      present because the topic appears.
+expected_outcome: >
+  Two missing (Lambda 900 s, SQS 14 days), one already present
+  (storage.md:9), each confirmed by grepping the value.

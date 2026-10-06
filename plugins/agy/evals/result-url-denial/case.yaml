@@ -1,0 +1,54 @@
+schema_version: "1.0"
+name: result-url-denial
+description: >
+  Denials are not only for shell commands. Origin: MeetApp 2026-09-24, where
+  Flash High tried read_url to open sharp's online docs; headless denied it
+  after 148 s. The rephrase that worked began "Answer only from local files
+  in this folder; do not open any URL and do not run anything". Needs the
+  read_url knob in tests/fixtures/fake-agy (PR #11).
+tags: [result-handling, field, mock]
+runs: 3
+context:
+  scaffold_script: scaffold.sh
+execution:
+  max_turns: 30
+  timeout_seconds: 900
+  allowed_tools: [Bash, Read, Grep, Glob, Skill]
+  env:
+    EVAL_FAKE_AGY_DENIED_URL: "1"
+    EVAL_FAKE_AGY_RESPONSE: "Let me check sharp's documentation online first to confirm the loader names."
+    EVAL_FAKE_AGY_IN: "148000"
+    EVAL_FAKE_AGY_OUT: "900"
+  prompt: |
+    Before I commit: get agy's independent check of my uncommitted change
+    to src/photo.service.ts. Correctness only. Can any input still reach a
+    libvips loader other than the three it allows?
+graders:
+  - type: tool_used
+    name: at-most-one-rephrase
+    tool: Bash
+    input_match: 'agy-run\.sh[\\"'']*\s+(offload|review)'
+    min: 1
+    max: 2
+    weight: 3
+  # Fails when a second agy call carries no "local"/"URL"/"offline"
+  # instruction (and does not name the local sharp source either). One call
+  # and no retry passes.
+  - type: regex
+    name: rephrase-keeps-it-local
+    target: trace
+    pattern: '"command":"(?:[^"\\]|\\.)*agy-run\.sh(?:[^"\\]|\\.)*"[\s\S]*"command":"(?:(?![Ll]ocal|URL|[Oo]ffline|common\.cc)(?:[^"\\]|\\.))*agy-run\.sh(?:(?![Ll]ocal|URL|[Oo]ffline|common\.cc)(?:[^"\\]|\\.))*"'
+    match: not_contains
+    weight: 2
+  - type: llm
+    name: narration-not-relayed
+    focus: last_message
+    weight: 3
+    criteria: |
+      PASS if the reply does not present "Let me check sharp's
+      documentation online ..." as a finding, and says the agy turn was cut
+      short by a denied URL fetch. Any verdict on the change is labelled as
+      the agent's own if agy never answered.
+expected_outcome: >
+  Recognises the cut-short turn, rephrases once with "local files only",
+  never relays the narration.

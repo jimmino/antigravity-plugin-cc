@@ -25,10 +25,10 @@ Show the output as-is. Any other argument: say the profile is `claude` or
 What the profiles mean, if the user asks:
 
 - `gemini` (default) — offload and review use Flash (`balanced`); ask,
-  delegate and research use agy's own default; `/agy:second-opinion` runs a
+  delegate and research use agy's own default; `/agy-bridge:second-opinion` runs a
   fresh Claude Code on the user's Claude plan.
 - `claude` — offload, ask and delegate use Sonnet inside agy; review and
-  research use Opus; `/agy:second-opinion` runs Opus inside agy. All of it
+  research use Opus; `/agy-bridge:second-opinion` runs Opus inside agy. All of it
   spends the Google plan's quota. A Claude model that runs out of capacity
   falls back to the other Claude family, then Pro, then Flash — never to the
   claude CLI.
@@ -37,4 +37,4 @@ What the profiles mean, if the user asks:
   config file the output names.
 
 This session still spends Claude tokens to write each prompt and read each
-answer. `/agy:stats` shows how the work split between the two plans.
+answer. `/agy-bridge:stats` shows how the work split between the two plans.

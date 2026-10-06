@@ -3,13 +3,15 @@
 # Claude Code. Written by agy-run.sh bridge install, removed by bridge
 # uninstall. Do not edit it: the next install overwrites it.
 #
-# The agy plugin for Claude Code keeps its scripts in a folder named after the
-# plugin version, so their path changes with every release. This file stays
+# The agy-bridge plugin for Claude Code keeps its scripts in a folder named
+# after the plugin version, so their path changes with every release. This file stays
 # where it is and runs `agy-run.sh ask-claude` from the version that Claude
 # Code has installed now. A plugin upgrade does not change what agy calls.
 #
 # Lookup order: $AGY_RUN_SH, then Claude Code's installed_plugins.json, then
-# the newest agy version in Claude Code's plugin cache.
+# the newest version in Claude Code's plugin cache. The plugin was named `agy`
+# before 0.10.0 and `agy-bridge` since; both names are looked up, the new one
+# first.
 set -euo pipefail
 
 # ask-claude.ps1 sends the arguments base64-encoded in AGY_BRIDGE_ARGV, not on
@@ -35,8 +37,9 @@ posix_path() {
   if command -v cygpath >/dev/null 2>&1; then cygpath -u "$1"; else printf '%s' "$1"; fi
 }
 
-# Install paths of every agy plugin Claude Code has installed, user scope first:
-# a project-scope install belongs to one repository.
+# Install paths of every agy-bridge plugin Claude Code has installed, user
+# scope first: a project-scope install belongs to one repository. Installs
+# under the pre-rename name `agy` come last.
 from_registry() {
   local registry="$plugins/installed_plugins.json"
   [ -f "$registry" ] || return 0
@@ -51,21 +54,25 @@ except Exception:
     sys.exit(0)
 rows = []
 for key, entries in plugins.items() if isinstance(plugins, dict) else []:
-    if not key.startswith("agy@"):
+    if key.startswith("agy-bridge@"):
+        rank = 0
+    elif key.startswith("agy@"):
+        rank = 2
+    else:
         continue
     for entry in entries if isinstance(entries, list) else [entries]:
         if isinstance(entry, dict) and isinstance(entry.get("installPath"), str):
-            rows.append((0 if entry.get("scope") == "user" else 1, entry["installPath"]))
+            rows.append((rank + (0 if entry.get("scope") == "user" else 1), entry["installPath"]))
 for _, path in sorted(rows):
     print(path)
 PY
 }
 
-# Every cached agy version, newest first. The sort key pads each number in the
-# version, so 0.10.0 sorts above 0.9.0 without GNU sort -V.
+# Every cached version under either name, newest first. The sort key pads each
+# number in the version, so 0.10.0 sorts above 0.9.0 without GNU sort -V.
 from_cache() {
   local dir
-  for dir in "$plugins"/cache/*/agy/*/; do
+  for dir in "$plugins"/cache/*/agy-bridge/*/ "$plugins"/cache/*/agy/*/; do
     if [ -d "$dir" ]; then printf '%s\n' "${dir%/}"; fi
   done | awk -F/ '{
       key = ""; n = split($NF, part, /[^0-9]+/)
@@ -108,11 +115,11 @@ case "$rc" in
     fi
     exec "${BASH:-bash}" "$wrapper" ask-claude "$@" ;;
   2)
-    echo "ask-claude: the agy plugin that Claude Code has installed is older than this bridge." >&2
+    echo "ask-claude: the agy-bridge plugin that Claude Code has installed is older than this bridge." >&2
     echo "            Update the plugin in Claude Code (/plugin), then try again." >&2
     exit 127 ;;
   *)
-    echo "ask-claude: cannot find the agy plugin for Claude Code under $plugins." >&2
+    echo "ask-claude: cannot find the agy-bridge plugin for Claude Code under $plugins." >&2
     echo "            Install it, or set AGY_RUN_SH to the path of its scripts/agy-run.sh." >&2
     exit 127 ;;
 esac

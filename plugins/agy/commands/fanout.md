@@ -55,7 +55,7 @@ than a path. The wrapper detects that and says so.
 - Run it with `run_in_background: true`. There is no reason to sit idle for
   three minutes.
 - Keep prompts short. Long context per job is not supported here — if a job
-  needs a diff or a log, run it on its own with `/agy:offload --stdin`.
+  needs a diff or a log, run it on its own with `/agy-bridge:offload --stdin`.
 
 ## Reading the result
 
