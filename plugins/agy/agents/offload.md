@@ -1,7 +1,7 @@
 ---
 name: offload
 description: Delegate a wide or bulk read to the Antigravity CLI (`agy`) and return a short, cited answer. Use when a question spans more source than is worth pulling into the parent context — repo-wide reconnaissance, "where is X handled", candidate generation for a review or audit — or when the user says "offload this", "ask agy", "let Gemini read it". Read-only. Slow (1-3 min per call).
-model: sonnet
+model: haiku
 tools: Bash, Read, Grep, Glob
 skills:
   - offloading

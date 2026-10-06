@@ -1,21 +1,20 @@
 ---
-description: Delegate a thorough research investigation to the agy:runner subagent
+description: Delegate a thorough research investigation to the Antigravity CLI (`agy`)
 argument-hint: "[--background] [--model <alias|id>] [--effort low|medium|high] <topic or question>"
-allowed-tools: Agent
+allowed-tools: ['Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" ask *)', 'Bash("${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" ask *)']
 ---
 
-Hand a deep-research task to the `agy:runner` subagent
-(`subagent_type: "agy:runner"`).
-
-Wrap the user's topic in a research-oriented preamble so `agy` treats it as
-a structured investigation rather than a quick Q&A.
+Hand a deep-research task to the Antigravity CLI through the wrapper, in one
+`Bash` call. No subagent: a subagent that only forwards one call spends Claude
+tokens for nothing.
 
 Raw user request:
 $ARGUMENTS
 
-## How to forward
+## How to invoke
 
-Build the research prompt for the subagent as:
+Strip any routing flags — `--background`, `--model <value>`,
+`--effort <level>` — from the topic, then build the prompt as:
 
 ```
 Conduct a thorough research investigation on the following topic. Look up
@@ -26,29 +25,33 @@ sections (Background, Key findings, Caveats, Sources).
 Topic: <stripped user request here>
 ```
 
-(Strip any routing flags — `--background`, `--model <value>`,
-`--effort <level>` — from the topic text before injecting it.)
+Run one of:
 
-Then invoke the `agy:runner` subagent with that prompt as
-`subagent_type: "agy:runner"`.
+```
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" ask --for research "<prompt>"
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" ask --for research --model <value> "<prompt>"
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" ask --for research --model <value> --effort <level> "<prompt>"
+```
 
-## Routing rules
+- Quote the prompt as one shell argument so characters like `"`, `$`, `;`,
+  `\` and backticks cannot break out.
+- Research is often long-running: run the Bash call with
+  `run_in_background: true` unless the user explicitly asked for foreground.
+  Set the Bash tool timeout to 600000 ms.
+- Put `--model` and `--effort` **before** the prompt argument.
 
-- If the request contains `--background`, launch the subagent with
-  `run_in_background: true`. Research is often long-running — prefer
-  background unless the user explicitly asked for foreground.
-- If the request contains `--model <value>` or `--effort <level>`, forward
-  them to the subagent so they can be placed **before** the prompt argument.
-- If no model is given, leave the choice to whatever the TUI is currently set
-  to. For research, a reasoning-strong alias such as `deep` (newest Pro at
-  high effort) or `opus` works well.
+## Choosing `--model`
 
-Aliases resolve against the live catalogue — run `/agy:models` to see it
-rather than reciting model names from memory.
+Without `--model`, the user's profile decides (`/agy:profile`). The `claude`
+profile picks Opus inside agy, on the Google plan's quota. The default
+`gemini` profile leaves the choice to the agy TUI's model; `deep` (newest Pro
+at high effort) or `opus` work well for research. Aliases resolve against the
+live catalogue — run `/agy:models` to see it rather than reciting model names
+from memory.
 
 ## Response style
 
-Return the subagent's output verbatim — no extra commentary before or
-after.
+Return Antigravity's stdout verbatim — no extra commentary before or after.
+If the call exits non-zero, return its stderr verbatim and stop.
 
 If the user did not supply a topic, ask what they want researched.

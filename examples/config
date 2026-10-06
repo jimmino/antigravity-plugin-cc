@@ -1,0 +1,38 @@
+# agy plugin — settings
+#
+# Copy to:  ~/.config/agy-plugin/config
+#   (or set AGY_CONFIG_FILE to point somewhere else)
+#
+# Same format as aliases.conf: `key = value`, one per line, `#` starts a
+# comment. `/agy:profile claude` and `/agy:profile gemini` rewrite only the
+# `profile` line and keep the rest.
+#
+# Like aliases.conf, this file is read from your user config only — never from
+# a project you have checked out — so a repository cannot change which model
+# or which plan your prompts go to.
+
+# --------------------------------------------------------------- profile ---
+# gemini (default): offload and review use `balanced`; ask, delegate and
+#                   research use agy's own default; second-opinion runs a
+#                   fresh Claude Code on your Claude plan.
+# claude:           everything runs on the Claude models agy offers, on the
+#                   Google plan's quota. offload, ask, delegate -> sonnet;
+#                   review, research, second-opinion -> opus.
+# AGY_PROFILE in the environment beats this line.
+profile = claude
+
+# ----------------------------------------------------- per-task defaults ---
+# Beat the profile for one task. Any alias, model id or display name works.
+# Tasks: offload, review, ask, delegate, research, second-opinion.
+# An explicit --model on the command still wins over all of this.
+# default.offload  = sonnet-medium    # cheaper on quota for wide sweeps
+# default.review   = opus-high
+# default.research = deep             # Gemini Pro instead of Opus
+
+# -------------------------------------------------------- second opinion ---
+# Which runner /agy:second-opinion uses when --via is not given:
+#   claude  a fresh Claude Code (can search; your Claude plan)
+#   agy     a Claude model inside agy (file map only; the Google plan)
+# default.second-opinion names the model for `agy`. `claude` always uses opus
+# unless --model says otherwise.
+# second-opinion.via = agy

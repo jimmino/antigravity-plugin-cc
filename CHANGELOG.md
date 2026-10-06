@@ -7,7 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-05
+
 ### Added
+- **Claude on the Google plan: the `claude` profile.** Google AI Pro and Ultra
+  let `agy` run Claude models. `/agy:profile claude` points every command
+  that gets no `--model` at them, so the work spends the Google plan's quota
+  instead of the user's own Claude subscription: offload, ask and delegate use
+  `sonnet`; review and research use `opus`; `/agy:second-opinion` runs `opus`
+  inside `agy`. `gemini`, the default, keeps the earlier choices. The profile
+  lives in a new user-scoped config file, `~/.config/agy-plugin/config`
+  (`AGY_CONFIG_FILE`; `AGY_PROFILE` beats it for one shell), which also takes
+  per-task overrides such as `default.offload = sonnet-medium` and
+  `second-opinion.via`. Like the aliases file, it is never read from a
+  checked-out project. `examples/config` documents it. `ask` takes
+  `--for <task>`, so `/agy:delegate` and `/agy:research` get their own
+  defaults.
+- **A file map for every offload.** Measured with `agy` 1.2.17: a headless run
+  gives every model one file tool, `view_file`, and nothing that lists a
+  folder or searches. Sonnet, asked which files mention a flag, said it had no
+  listing tool and guessed file names. The offload path now writes
+  `files.txt` next to the context file: git's list of tracked and new files
+  for each workspace root (or `find`, minus `.git`, `node_modules` and the
+  like), never a `.env`, at most 3000 per root (`AGY_OFFLOAD_MAP_MAX`), the
+  deepest dropped first. The prompt names it. With the map, the same question
+  found hits in five subfolders. `--no-map` leaves it out. This applies to
+  `review`, `fanout` and `second-opinion --via agy` as well.
+- **`/agy:second-opinion --via agy`.** The second opinion can come from a
+  Claude model inside `agy` instead of a fresh Claude Code. It goes through the
+  read-only offload path with the file map, and `--effort` picks the matching
+  variant (`opus-high`, `sonnet-medium`). `--via claude` is the earlier
+  behaviour and stays the default under the `gemini` profile.
+- **A usage ledger and `/agy:stats`.** Each `agy` and `claude` run adds one
+  line to `~/.local/state/agy-plugin/usage.tsv` (`AGY_LEDGER_FILE`): time,
+  runner, label, model, seconds, tokens, outcome and, for `claude`, cost.
+  Never a prompt, an answer or a path. `/agy:stats` sums it by model and
+  splits the Google plan from the Claude plan. `AGY_LEDGER=0` turns it off.
 - **Effort aliases for Claude models.** agy now offers Claude Opus 5.5 and
   Claude Sonnet 5.5 in Low, Medium and High variants. New aliases pick one:
   `opus-low`, `opus-medium` (`opus-med`), `opus-high`, `sonnet-low`,
@@ -16,6 +51,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a family and effort, not a version.
 
 ### Changed
+- **A Claude model falls back to Claude first.** On a capacity failure, an
+  offload on Sonnet tries Opus (and the reverse), then Pro, then Flash. It
+  never falls back to the `claude` CLI. A quota or rate-limit error now counts
+  as a capacity failure, so a plan's Claude quota running out moves to the
+  next model instead of ending the run.
+- **`/agy:delegate` and `/agy:research` call the wrapper directly.** They
+  went through the `agy:runner` subagent, which spent Claude tokens to forward
+  one call. They now run `agy-run.sh ask --for delegate|research` themselves;
+  `--background` becomes `run_in_background` on the Bash call.
+- **The `agy:runner` and `agy:offload` subagents run on Haiku**, not Sonnet.
+  Each makes one wrapper call.
+- The offload guard no longer tells the model to use "list and search tools",
+  which `agy` does not give it.
 - **`claude` prefers Opus on a version tie.** Opus 5.5 and Sonnet 5.5 share
   a version, and the id sort alone handed `claude` to Sonnet. Opus now wins
   the tie. A newer Sonnet still beats an older Opus.
