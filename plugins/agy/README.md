@@ -91,7 +91,10 @@ whether `agy` is signed in. `agy` itself reads the key.
 Full usage, configuration and environment variables are in the
 [repository README](https://github.com/jimmino/antigravity-plugin-cc#readme).
 Changes are in the
-[changelog](https://github.com/jimmino/antigravity-plugin-cc/blob/main/CHANGELOG.md).
+[changelog](https://github.com/jimmino/antigravity-plugin-cc/blob/main/CHANGELOG.md),
+and the
+[privacy policy](https://github.com/jimmino/antigravity-plugin-cc/blob/main/PRIVACY.md)
+says what data goes where.
 
 This plugin is a fork of
 [simplybychris/antigravity-plugin-cc](https://github.com/simplybychris/antigravity-plugin-cc).
