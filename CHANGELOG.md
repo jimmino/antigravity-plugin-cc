@@ -31,6 +31,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ARCHITECTURE.md`.
 - **License and links in `plugin.json`**: `license`, `homepage`,
   `repository` and `keywords`, plus a `LICENSE` copy in the plugin folder.
+- **Directory listing fields**: an `icon` (`plugins/agy/icon.png`, drawn
+  from `tools/icon.svg`), `documentationUrl`, and `privacyPolicyUrl`
+  pointing at the new `PRIVACY.md`, which states that the plugin collects
+  nothing and lists where `agy` and `claude` send data.
 - **The offloading eval suite** in `plugins/agy/evals/`, for
   `claude plugin eval`. Its `results/` folder is git-ignored.
 

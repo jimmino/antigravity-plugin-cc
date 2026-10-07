@@ -9,5 +9,8 @@
   "homepage": "https://github.com/jimmino/antigravity-plugin-cc",
   "repository": "https://github.com/jimmino/antigravity-plugin-cc",
   "license": "MIT",
+  "icon": "./icon.png",
+  "documentationUrl": "https://github.com/jimmino/antigravity-plugin-cc#readme",
+  "privacyPolicyUrl": "https://github.com/jimmino/antigravity-plugin-cc/blob/main/PRIVACY.md",
   "keywords": ["antigravity", "agy", "gemini", "offload", "delegate", "code-review", "second-opinion"]
 }
