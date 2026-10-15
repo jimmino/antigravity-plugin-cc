@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Gemini 4 Argon.** `argon`, `argon-low`, `argon-medium` (`argon-med`) and
+  `argon-high` resolve to the newest Argon in the live catalogue. Antigravity
+  offers Argon on Google AI Ultra plans only; elsewhere the alias fails with
+  the list of models the catalogue does have. The exact id or display name
+  and the `gemini` alias already followed new models, and need no change.
+
 ## [0.10.0] - 2026-10-06
 
 ### Changed

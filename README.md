@@ -342,6 +342,11 @@ The three tier aliases are the ones worth learning:
 - `balanced` — newest Flash at high effort. The workhorse.
 - `deep` — newest Pro at high effort. Bounded, careful reads.
 
+`argon`, `argon-low`, `argon-medium` and `argon-high` select Gemini 4 Argon,
+which Antigravity offers on Google AI Ultra plans only. On other plans the
+catalogue has no Argon and the alias fails with the list of models that exist.
+`gemini` moves to Argon by itself once the catalogue lists it.
+
 Claude models in agy come in Low, Medium and High effort variants. `opus` and
 `sonnet` take the highest effort offered; `opus-low`, `opus-medium`,
 `opus-high` and the matching `sonnet-*` aliases pick one. `haiku` resolves

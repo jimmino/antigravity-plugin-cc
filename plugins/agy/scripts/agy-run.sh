@@ -480,6 +480,10 @@ builtin_alias_spec() {
     pro-low)                  echo "pro|low" ;;
     pro-medium|pro-med)       echo "pro|medium" ;;
     pro|pro-high)             echo "pro|high" ;;
+    argon)                    echo "argon|" ;;
+    argon-low)                echo "argon|low" ;;
+    argon-medium|argon-med)   echo "argon|medium" ;;
+    argon-high)               echo "argon|high" ;;
     sonnet|claude-sonnet)     echo "sonnet|" ;;
     sonnet-low)               echo "sonnet|low" ;;
     sonnet-medium|sonnet-med) echo "sonnet|medium" ;;
@@ -507,6 +511,10 @@ flash (flash-high)	newest Flash, high effort
 pro-low	newest Pro, low effort
 pro-medium (pro-med)	newest Pro, medium effort
 pro (pro-high)	newest Pro, high effort
+argon	newest Argon, highest effort offered (Google AI Ultra plans)
+argon-low	newest Argon, low effort
+argon-medium (argon-med)	newest Argon, medium effort
+argon-high	newest Argon, high effort
 sonnet (claude-sonnet)	newest Claude Sonnet, highest effort offered
 sonnet-low	newest Claude Sonnet, low effort
 sonnet-medium (sonnet-med)	newest Claude Sonnet, medium effort

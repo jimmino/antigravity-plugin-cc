@@ -286,6 +286,28 @@ t_alias_claude_effort_variants() {
   argv_has "claude-sonnet-5-5-medium" || fail_msg "sonnet-med => medium-effort Sonnet; argv: $(argv_log | tr '\n' ' ')"
 }
 
+t_alias_argon_follows_the_catalogue() {
+  # Argon is a family, so the alias must follow whatever id the catalogue gives it.
+  use_catalog 'gemini-4-argon-high|Gemini 4 Argon (High)' \
+              'gemini-4-argon-low|Gemini 4 Argon (Low)' \
+              'gemini-3.8-flash-high|Gemini 3.8 Flash (High)'
+  run_wrapper ask --model argon "hi"
+  argv_has "gemini-4-argon-high" || fail_msg "argon => newest Argon at its highest effort; argv: $(argv_log | tr '\n' ' ')"
+  run_wrapper ask --model argon-low "hi"
+  argv_has "gemini-4-argon-low" || fail_msg "argon-low => low-effort Argon; argv: $(argv_log | tr '\n' ' ')"
+  run_wrapper ask --model "Gemini 4 Argon (High)" "hi"
+  argv_has "gemini-4-argon-high" || fail_msg "the display name resolves through the catalogue; argv: $(argv_log | tr '\n' ' ')"
+  run_wrapper ask --model gemini "hi"
+  argv_has "gemini-4-argon-high" || fail_msg "gemini => the newest generation, now Argon; argv: $(argv_log | tr '\n' ' ')"
+}
+
+t_alias_argon_absent_on_plans_without_it() {
+  # Argon is Ultra-only in Antigravity; the current fixture has none.
+  run_wrapper ask --model argon "hi"
+  assert_eq 64 "$RC" "argon on a plan without it is a usage error"
+  assert_contains "$ERR" "matches no model in the current catalogue" "the error says why"
+}
+
 t_alias_missing_effort_names_the_variants() {
   # Pro ships High and Low only. Asking for medium must fail, and must not
   # claim the variants are unnamed when they plainly say -high and -low.
@@ -2273,6 +2295,8 @@ it "alias: pro-low"                                     t_alias_pro_low
 it "alias: opus"                                        t_alias_opus
 it "alias: sonnet"                                      t_alias_sonnet
 it "alias: opus-low / sonnet-med pick Claude effort"    t_alias_claude_effort_variants
+it "alias: argon follows the catalogue, gemini moves to it" t_alias_argon_follows_the_catalogue
+it "alias: argon fails clearly when the plan lacks it"  t_alias_argon_absent_on_plans_without_it
 it "alias: pro-medium names the variants that exist"    t_alias_missing_effort_names_the_variants
 it "alias: gpt-oss"                                     t_alias_gpt_oss
 it "alias: case-insensitive"                            t_alias_is_case_insensitive
