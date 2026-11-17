@@ -27,7 +27,7 @@ profile = claude
 # An explicit --model on the command still wins over all of this.
 # default.offload  = sonnet-medium    # cheaper on quota for wide sweeps
 # default.review   = opus-high
-# default.research = deep             # Gemini Pro instead of Opus
+# default.research = deep             # Gemini Carbon instead of Opus
 
 # -------------------------------------------------------- second opinion ---
 # Which runner /agy-bridge:second-opinion uses when --via is not given:

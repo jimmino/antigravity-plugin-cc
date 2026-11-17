@@ -66,12 +66,15 @@ live `agy models` catalogue — so they follow new releases on their own. Run
 
 | Tier | Resolves to | For |
 |---|---|---|
-| `fast` | newest Flash, low effort | wide shallow sweeps, candidate lists |
-| `balanced` | newest Flash, high effort | **the workhorse** |
-| `deep` | newest Pro, high effort | situational; see below |
+| `fast` | newest Hydrogen, low effort (Flash on the free plan) | wide shallow sweeps, candidate lists |
+| `balanced` | newest Hydrogen, high effort (Flash on the free plan) | **the workhorse** |
+| `deep` | newest Carbon, high effort (else Argon, else Pro) | situational; see below |
 
 Without `--model`, the profile picks the tier (`/agy-bridge:profile`): `balanced`
 under `gemini`, `sonnet` inside agy under `claude`.
+
+The measurements below were taken on Flash and Pro, before Hydrogen and Carbon
+became the tiers. Treat them as the shape to expect, not as settled numbers.
 
 `fast` handles "find X in this code" but not "compare these two sets". Asked
 which numeric limits in a raw corpus were absent from a curated note set, Flash

@@ -34,8 +34,8 @@ line, which Windows caps at ~32K characters.
 Tier: without `--model` the profile decides — `balanced`, the workhorse, under
 `gemini`; `sonnet` inside agy under `claude`. `fast` for wide shallow
 sweeps; `deep` only for a bounded read over a file list you name explicitly, and
-never for anything phrased as security work — the newest Pro refuses that
-framing where Flash answers. Run
+never for anything phrased as security work — Pro refused that
+framing where Flash answered, and Carbon is untested there. Run
 `bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" models` rather than reciting
 model names from memory.
 

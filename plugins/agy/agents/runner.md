@@ -38,7 +38,7 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" ask [--model <value>] [--effort 
   ```
   bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" ask --model opus "fix the off-by-one"
   ```
-- `--model` takes an intent alias (`fast`, `balanced`, `deep`, `flash`,
+- `--model` takes an intent alias (`fast`, `balanced`, `deep`, `hydrogen`, `carbon`, `flash`,
   `pro`, `sonnet`, `opus`, `gpt-oss`, …), an exact model id or display name,
   or any custom model the user has configured in agy. Aliases resolve against
   the live `agy models` catalogue, so they track new releases on their own.
