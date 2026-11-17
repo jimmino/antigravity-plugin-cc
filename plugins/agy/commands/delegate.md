@@ -1,6 +1,6 @@
 ---
 description: Delegate a task to the Antigravity CLI (`agy`); supports background execution and model selection
-argument-hint: "[--background] [--model <alias|id>] [--effort low|medium|high] <task description>"
+argument-hint: "[--background] [--model <alias|id>] [--effort low|medium|high|xhigh|max] <task description>"
 allowed-tools: ['Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" ask *)', 'Bash("${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" ask *)']
 ---
 

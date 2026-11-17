@@ -65,7 +65,7 @@ Flags, all before the prompt:
 - `--label <name>` — names the run in the telemetry line.
 - `--budget <seconds>` — total across all attempts (default 540, under Claude
   Code's 600s tool kill). Set the Bash tool timeout to 600000 ms.
-- `--effort low|medium|high`, `--timeout <duration>`, `--no-fallback`, `--raw`.
+- `--effort low|medium|high|xhigh|max`, `--timeout <duration>`, `--no-fallback`, `--raw`.
 - `--no-map` — leave out the file map. agy gives a headless run only a file
   viewer, with no tool that lists or searches, so by default the wrapper writes
   a map of the workspace (git's file list; never a `.env`) for the model to

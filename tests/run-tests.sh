@@ -308,6 +308,92 @@ t_alias_argon_absent_on_plans_without_it() {
   assert_contains "$ERR" "matches no model in the current catalogue" "the error says why"
 }
 
+# The Gemini 4 line-up on a paid plan: Hydrogen is the fast tier, Carbon the
+# deepest, Argon in between. Ids follow agy's "gemini-4-<family>-<effort>".
+use_gemini4_catalog() {
+  use_catalog 'gemini-4-carbon-high|Gemini 4 Carbon (High)' \
+              'gemini-4-carbon-medium|Gemini 4 Carbon (Medium)' \
+              'gemini-4-carbon-low|Gemini 4 Carbon (Low)' \
+              'gemini-4-argon-high|Gemini 4 Argon (High)' \
+              'gemini-4-argon-low|Gemini 4 Argon (Low)' \
+              'gemini-4-hydrogen-xhigh|Gemini 4 Hydrogen (Extra)' \
+              'gemini-4-hydrogen-high|Gemini 4 Hydrogen (High)' \
+              'gemini-4-hydrogen-medium|Gemini 4 Hydrogen (Medium)' \
+              'gemini-4-hydrogen-low|Gemini 4 Hydrogen (Low)' \
+              'gemini-3.8-flash-high|Gemini 3.8 Flash (High)' \
+              'gemini-3.8-flash-low|Gemini 3.8 Flash (Low)'
+}
+
+t_tiers_move_to_hydrogen_and_carbon() {
+  use_gemini4_catalog
+  run_wrapper ask --model fast "hi"
+  argv_has "gemini-4-hydrogen-low" || fail_msg "fast => low-effort Hydrogen; argv: $(argv_log | tr '\n' ' ')"
+  run_wrapper ask --model balanced "hi"
+  argv_has "gemini-4-hydrogen-high" || fail_msg "balanced => high-effort Hydrogen, not XHigh; argv: $(argv_log | tr '\n' ' ')"
+  run_wrapper ask --model deep "hi"
+  argv_has "gemini-4-carbon-high" || fail_msg "deep => high-effort Carbon; argv: $(argv_log | tr '\n' ' ')"
+  run_wrapper ask --model flash "hi"
+  argv_has "gemini-3.8-flash-high" || fail_msg "flash still means Flash; argv: $(argv_log | tr '\n' ' ')"
+}
+
+t_tiers_fall_back_by_plan() {
+  # AI Pro: Hydrogen and Argon, no Carbon.
+  use_catalog 'gemini-4-argon-high|Gemini 4 Argon (High)' \
+              'gemini-4-argon-low|Gemini 4 Argon (Low)' \
+              'gemini-4-hydrogen-high|Gemini 4 Hydrogen (High)' \
+              'gemini-4-hydrogen-low|Gemini 4 Hydrogen (Low)' \
+              'gemini-3.8-flash-high|Gemini 3.8 Flash (High)'
+  run_wrapper ask --model deep "hi"
+  argv_has "gemini-4-argon-high" || fail_msg "deep without Carbon => Argon; argv: $(argv_log | tr '\n' ' ')"
+  run_wrapper ask --model balanced "hi"
+  argv_has "gemini-4-hydrogen-high" || fail_msg "balanced => Hydrogen on AI Pro; argv: $(argv_log | tr '\n' ' ')"
+  # Free plan: Flash only. The default fixture's Flash/Pro tests cover Pro.
+  use_catalog 'gemini-3.8-flash-high|Gemini 3.8 Flash (High)' \
+              'gemini-3.8-flash-low|Gemini 3.8 Flash (Low)'
+  run_wrapper ask --model fast "hi"
+  argv_has "gemini-3.8-flash-low" || fail_msg "fast without Hydrogen => Flash; argv: $(argv_log | tr '\n' ' ')"
+  run_wrapper ask --model deep "hi"
+  assert_eq 64 "$RC" "deep with no deep family at all is a usage error"
+  assert_contains "$ERR" "matches no model in the current catalogue" "the error says why"
+}
+
+t_tiers_skip_a_preview_only_family() {
+  use_catalog 'gemini-4-hydrogen-preview-high|Gemini 4 Hydrogen Preview (High)' \
+              'gemini-3.8-flash-high|Gemini 3.8 Flash (High)'
+  run_wrapper ask --model balanced "hi"
+  argv_has "gemini-3.8-flash-high" || fail_msg "a preview-only Hydrogen passes to Flash; argv: $(argv_log | tr '\n' ' ')"
+  run_wrapper ask --model hydrogen "hi"
+  assert_eq 64 "$RC" "the bare family alias still refuses the preview"
+  assert_contains "$ERR" "only preview or experimental" "and says why"
+}
+
+t_alias_hydrogen_and_carbon() {
+  use_gemini4_catalog
+  run_wrapper ask --model hydrogen "hi"
+  argv_has "gemini-4-hydrogen-high" || fail_msg "hydrogen => High, agy's default level; argv: $(argv_log | tr '\n' ' ')"
+  run_wrapper ask --model hydrogen-extra "hi"
+  argv_has "gemini-4-hydrogen-xhigh" || fail_msg "hydrogen-extra => XHigh; argv: $(argv_log | tr '\n' ' ')"
+  run_wrapper ask --model hydrogen-med "hi"
+  argv_has "gemini-4-hydrogen-medium" || fail_msg "hydrogen-med => Medium; argv: $(argv_log | tr '\n' ' ')"
+  run_wrapper ask --model carbon "hi"
+  argv_has "gemini-4-carbon-high" || fail_msg "carbon => highest effort offered; argv: $(argv_log | tr '\n' ' ')"
+  run_wrapper ask --model carbon-low "hi"
+  argv_has "gemini-4-carbon-low" || fail_msg "carbon-low => Low; argv: $(argv_log | tr '\n' ' ')"
+}
+
+t_alias_gemini_prefers_the_deep_family() {
+  # Hydrogen's XHigh outranks every High on effort; `gemini` must still
+  # mean the most capable model of the newest generation.
+  use_gemini4_catalog
+  run_wrapper ask --model gemini "hi"
+  argv_has "gemini-4-carbon-high" || fail_msg "gemini => Carbon, not Hydrogen XHigh; argv: $(argv_log | tr '\n' ' ')"
+  use_catalog 'gemini-4-hydrogen-xhigh|Gemini 4 Hydrogen (Extra)' \
+              'gemini-4-hydrogen-high|Gemini 4 Hydrogen (High)' \
+              'gemini-3.8-flash-high|Gemini 3.8 Flash (High)'
+  run_wrapper ask --model gemini "hi"
+  argv_has "gemini-4-hydrogen-xhigh" || fail_msg "with only Hydrogen in Gemini 4, gemini takes its top level; argv: $(argv_log | tr '\n' ' ')"
+}
+
 t_alias_missing_effort_names_the_variants() {
   # Pro ships High and Low only. Asking for medium must fail, and must not
   # claim the variants are unnamed when they plainly say -high and -low.
@@ -437,6 +523,8 @@ t_future_unknown_model_is_passed_through() {
 use_catalog() {
   printf '%s\n' "$@" | tr '|' '\t' > "$SANDBOX/cat.tsv"
   export FAKE_AGY_CATALOG="$SANDBOX/cat.tsv"
+  # A test may switch plans mid-way; the cached catalogue would hide that.
+  rm -f "$AGY_PLUGIN_CACHE_DIR/models.tsv"
 }
 
 t_effort_suffix_renamed_refuses_to_guess() {
@@ -639,6 +727,14 @@ t_effort_without_model_is_forwarded() {
   run_wrapper ask --effort high "hi"
   argv_has "--effort" || fail_msg "--effort alone should still reach agy"
   assert_not_contains "$(argv_log)" "--model" "no --model means none is sent"
+}
+
+t_effort_accepts_xhigh_and_max() {
+  run_wrapper ask --model flash --effort xhigh "hi"
+  assert_eq 0 "$RC" "xhigh is a valid agy effort"
+  argv_has "xhigh" || fail_msg "--effort xhigh should be forwarded"
+  run_wrapper ask --effort MAX "hi"
+  argv_has "max" || fail_msg "--effort max should be forwarded, lower-cased"
 }
 
 t_effort_rejects_bad_value() {
@@ -2141,6 +2237,40 @@ t_ask_follows_the_profile() {
   assert_not_contains "$(argv_log)" "--model" "the gemini profile leaves ask to agy's default"
 }
 
+t_claude_profile_falls_back_to_hydrogen_without_claude() {
+  # A plan with no Claude in agy (the free plan after Claude 4.6 left, or a
+  # Google AI Pro trial): the claude profile's defaults move to Hydrogen.
+  export AGY_PROFILE=claude
+  use_catalog 'gemini-4-hydrogen-high|Gemini 4 Hydrogen (High)' \
+              'gemini-4-hydrogen-low|Gemini 4 Hydrogen (Low)' \
+              'gemini-3.8-flash-high|Gemini 3.8 Flash (High)'
+  run_wrapper ask "q"
+  argv_has "gemini-4-hydrogen-high" || fail_msg "sonnet default => Hydrogen; argv: $(argv_log | tr '\n' ' ')"
+  assert_contains "$ERR" "no Claude sonnet, so hydrogen" "the swap is announced"
+  run_wrapper ask --for research "q"
+  argv_has "gemini-4-hydrogen-high" || fail_msg "opus default => Hydrogen; argv: $(argv_log | tr '\n' ' ')"
+  # No Hydrogen either: Flash.
+  use_catalog 'gemini-3.8-flash-high|Gemini 3.8 Flash (High)' \
+              'gemini-3.8-flash-low|Gemini 3.8 Flash (Low)'
+  export FAKE_AGY_RESPONSE="ok"
+  run_wrapper offload --dir "$SANDBOX" "q"
+  assert_eq 0 "$RC" "offload still runs"
+  argv_has "gemini-3.8-flash-high" || fail_msg "without Hydrogen => Flash; argv: $(argv_log | tr '\n' ' ')"
+  assert_contains "$ERR" "so flash" "and says so"
+}
+
+t_claude_fallback_spares_explicit_choices() {
+  export AGY_PROFILE=claude
+  use_catalog 'gemini-4-hydrogen-high|Gemini 4 Hydrogen (High)'
+  printf 'default.ask = opus\n' > "$AGY_PLUGIN_CONFIG_DIR/config"
+  run_wrapper ask "q"
+  if argv_has "gemini-4-hydrogen-high"; then fail_msg "a default.<task> line is never swapped"; fi
+  assert_contains "$ERR" "does not resolve" "it gets the usual note instead"
+  rm -f "$AGY_PLUGIN_CONFIG_DIR/config"
+  run_wrapper ask --model opus "q"
+  assert_eq 64 "$RC" "an explicit --model opus still fails clearly"
+}
+
 t_ask_rejects_an_unknown_task() {
   run_wrapper ask --for lunch "q"
   assert_eq 64 "$RC" "an unknown task is a usage error"
@@ -2297,6 +2427,11 @@ it "alias: sonnet"                                      t_alias_sonnet
 it "alias: opus-low / sonnet-med pick Claude effort"    t_alias_claude_effort_variants
 it "alias: argon follows the catalogue, gemini moves to it" t_alias_argon_follows_the_catalogue
 it "alias: argon fails clearly when the plan lacks it"  t_alias_argon_absent_on_plans_without_it
+it "tiers: fast/balanced on Hydrogen, deep on Carbon"   t_tiers_move_to_hydrogen_and_carbon
+it "tiers: fall back to Argon, Flash by plan"           t_tiers_fall_back_by_plan
+it "tiers: a preview-only family passes to the next"    t_tiers_skip_a_preview_only_family
+it "alias: hydrogen and carbon effort variants"         t_alias_hydrogen_and_carbon
+it "alias: gemini prefers Carbon over Hydrogen XHigh"   t_alias_gemini_prefers_the_deep_family
 it "alias: pro-medium names the variants that exist"    t_alias_missing_effort_names_the_variants
 it "alias: gpt-oss"                                     t_alias_gpt_oss
 it "alias: case-insensitive"                            t_alias_is_case_insensitive
@@ -2346,6 +2481,7 @@ it "user alias: project-local files are ignored"        t_project_local_alias_fi
 printf '\n%s\n' "effort"
 it "effort: forwarded to agy"                           t_effort_is_forwarded
 it "effort: works without --model"                      t_effort_without_model_is_forwarded
+it "effort: accepts xhigh and max"                     t_effort_accepts_xhigh_and_max
 it "effort: rejects a bad value"                        t_effort_rejects_bad_value
 it "effort: rejects a missing value"                    t_effort_rejects_missing_value
 it "effort: dropped on builds without the flag"         t_effort_skipped_on_builds_without_the_flag
@@ -2505,6 +2641,8 @@ it "profile: default.<task> beats the profile"              t_task_default_beats
 it "profile: a default that does not resolve degrades"      t_task_default_that_does_not_resolve_degrades
 it "profile: review uses Opus under claude"                 t_review_uses_opus_under_the_claude_profile
 it "profile: ask follows the profile and --for"             t_ask_follows_the_profile
+it "profile: no Claude in the plan => Hydrogen, then Flash"  t_claude_profile_falls_back_to_hydrogen_without_claude
+it "profile: the fallback spares explicit choices"           t_claude_fallback_spares_explicit_choices
 it "profile: --for rejects an unknown task"                 t_ask_rejects_an_unknown_task
 it "fallback: Claude tries Claude, then Pro, never claude"  t_claude_falls_back_to_claude_then_gemini
 it "fallback: a quota error is retried"                     t_offload_retries_when_the_quota_runs_out

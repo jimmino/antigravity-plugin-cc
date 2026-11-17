@@ -48,7 +48,9 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" models
 
 1. **Intent aliases**, which name a family and effort rather than a version
    and therefore follow new releases automatically:
-   `fast`, `balanced`, `deep`, `flash-low`, `flash-medium`, `flash`,
+   `fast`, `balanced`, `deep`, `hydrogen-low`, `hydrogen-medium`,
+   `hydrogen`, `hydrogen-xhigh`, `carbon`, `carbon-low`, `carbon-medium`,
+   `carbon-high`, `flash-low`, `flash-medium`, `flash`,
    `pro-low`, `pro-medium`, `pro`, `argon`, `argon-low`, `argon-medium`,
    `argon-high`, `sonnet`, `sonnet-low`, `sonnet-medium`,
    `sonnet-high`, `opus`, `opus-low`, `opus-medium`, `opus-high`, `haiku`,
@@ -64,7 +66,7 @@ Users can define their own aliases in
 `~/.config/agy-plugin/aliases.conf` (`name = target`, one per line). They are
 read from the user's config only, never from the checked-out project.
 
-`--effort low|medium|high` selects a reasoning-effort variant and is passed to
+`--effort low|medium|high|xhigh|max` selects a reasoning-effort variant and is passed to
 `agy --effort` when the installed build supports it.
 
 ## agy-native flags worth knowing

@@ -1,6 +1,6 @@
 ---
 description: Send the current git diff to the Antigravity CLI for an independent review, then verify every finding
-argument-hint: "[--model <alias|id>] [--effort low|medium|high] [focus text] [-- paths...]"
+argument-hint: "[--model <alias|id>] [--effort low|medium|high|xhigh|max] [focus text] [-- paths...]"
 allowed-tools: ['Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" review *)', 'Bash("${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" review *)', Read, Grep, Glob]
 ---
 
@@ -45,10 +45,10 @@ leaves the machine, and the wrapper says which.
 
 Leave it on the profile default unless the user asks otherwise: `balanced`
 under `gemini`, `opus` inside agy under `claude` (`/agy-bridge:profile`). Under
-`gemini`, a reasoning-strong `deep` is tempting, but the newest Pro at high
-effort refuses
-prompts framed as security audits where Flash answers the same question
-correctly — and a review that asks about authorization and IDOR is
+`gemini`, a reasoning-strong `deep` is tempting, but Pro at high effort (the
+older target of `deep`) refused
+prompts framed as security audits where Flash answered the same question
+correctly, and Carbon has not been measured on them yet — and a review that asks about authorization and IDOR is
 security-shaped.
 
 Frame findings as correctness rather than exploitation: which inputs reach a

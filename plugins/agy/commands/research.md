@@ -1,6 +1,6 @@
 ---
 description: Delegate a thorough research investigation to the Antigravity CLI (`agy`)
-argument-hint: "[--background] [--model <alias|id>] [--effort low|medium|high] <topic or question>"
+argument-hint: "[--background] [--model <alias|id>] [--effort low|medium|high|xhigh|max] <topic or question>"
 allowed-tools: ['Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" ask *)', 'Bash("${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" ask *)']
 ---
 
@@ -44,8 +44,8 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" ask --for research --model <valu
 
 Without `--model`, the user's profile decides (`/agy-bridge:profile`). The `claude`
 profile picks Opus inside agy, on the Google plan's quota. The default
-`gemini` profile leaves the choice to the agy TUI's model; `deep` (newest Pro
-at high effort) or `opus` work well for research. Aliases resolve against the
+`gemini` profile leaves the choice to the agy TUI's model; `deep` (newest Carbon
+at high effort, else Argon, else Pro) or `opus` work well for research. Aliases resolve against the
 live catalogue — run `/agy-bridge:models` to see it rather than reciting model names
 from memory.
 

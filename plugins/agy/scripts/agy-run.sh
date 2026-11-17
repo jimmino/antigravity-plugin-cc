@@ -327,6 +327,8 @@ _version_keyed() {
       return out
     }
     function effort_rank(s) {
+      if (s ~ /-max$/)    return 5
+      if (s ~ /-xhigh$/)  return 4
       if (s ~ /-high$/)   return 3
       if (s ~ /-medium$/) return 2
       if (s ~ /-low$/)    return 1
@@ -357,7 +359,7 @@ _alias_candidate_ids() {
 # FAMILY_ID, plus FAMILY_NOTE when the pick needs explaining on stderr.
 # Returns 1 when the family is absent, 3 when only previews match, and 2 when
 # an effort was asked for but the newest models in the family carry variants
-# this wrapper cannot read as low/medium/high, or lack that one effort (Pro
+# this wrapper cannot read as low/medium/high/xhigh/max, or lack that one effort (Pro
 # ships High and Low only) — guessing there would hand `fast` and `balanced`
 # the same model. FAMILY_CANDIDATES lists the models
 # behind a 2 or a 3.
@@ -383,11 +385,26 @@ _resolve_family() {
     [ -z "$opus" ] || ids="$opus"
   fi
 
+  # `gemini` means the newest, most capable Gemini. One generation ships
+  # several families (Carbon, Argon, Hydrogen), and the effort tie-break alone
+  # would hand it to Hydrogen's XHigh, the fast tier. The deep families win
+  # the tie, in the order Antigravity ranks them.
+  if [ "$family" = "gemini" ]; then
+    local newest_gen deep_one
+    newest_gen="$(printf '%s\n' "$ids" | _newest_version_ids)"
+    for deep_one in carbon argon pro; do
+      if grep -qi -- "$deep_one" <<<"$newest_gen"; then
+        ids="$(grep -i -- "$deep_one" <<<"$newest_gen")"
+        break
+      fi
+    done
+  fi
+
   if [ -z "$effort" ]; then
     # Prefer ids that carry no effort suffix at all (e.g. a single Claude
     # entry), else just the newest in the family.
     local plain
-    plain="$(printf '%s\n' "$ids" | grep -ivE -- '-(low|medium|high)$' || true)"
+    plain="$(printf '%s\n' "$ids" | grep -ivE -- '-(low|medium|high|xhigh|max)$' || true)"
     if [ -n "$plain" ]; then
       FAMILY_ID="$(printf '%s\n' "$plain" | _pick_newest)"
     else
@@ -469,11 +486,24 @@ user_alias_names() { _alias_rows; }
 # Intent-shaped, not version-shaped: each one names a *family and effort*, and
 # the concrete model is whatever the live catalogue currently offers there.
 # Adding a "Gemini 4 Flash" upstream makes `flash` point at it automatically.
+#
+# A spec is "family[,family...]|effort". The families are tried in order and
+# the first one the catalogue has wins, so the tiers reach the newest model a
+# plan offers: Hydrogen and Carbon need a paid Google AI plan, and Flash is
+# what the free plan has.
 builtin_alias_spec() {
   case "$(_lower "${1:-}")" in
-    fast)                     echo "flash|low" ;;
-    balanced)                 echo "flash|high" ;;
-    deep)                     echo "pro|high" ;;
+    fast)                     echo "hydrogen,flash|low" ;;
+    balanced)                 echo "hydrogen,flash|high" ;;
+    deep)                     echo "carbon,argon,pro|high" ;;
+    hydrogen-low)             echo "hydrogen|low" ;;
+    hydrogen-medium|hydrogen-med) echo "hydrogen|medium" ;;
+    hydrogen|hydrogen-high)   echo "hydrogen|high" ;;
+    hydrogen-xhigh|hydrogen-extra) echo "hydrogen|xhigh" ;;
+    carbon)                   echo "carbon|" ;;
+    carbon-low)               echo "carbon|low" ;;
+    carbon-medium|carbon-med) echo "carbon|medium" ;;
+    carbon-high)              echo "carbon|high" ;;
     flash-low)                echo "flash|low" ;;
     flash-medium|flash-med)   echo "flash|medium" ;;
     flash|flash-high)         echo "flash|high" ;;
@@ -502,16 +532,24 @@ builtin_alias_spec() {
 
 builtin_alias_names() {
   cat <<'ALIASES'
-fast	newest Flash, low effort
-balanced	newest Flash, high effort
-deep	newest Pro, high effort
+fast	newest Hydrogen, low effort (Flash if your plan has no Hydrogen)
+balanced	newest Hydrogen, high effort (Flash if your plan has no Hydrogen)
+deep	newest Carbon, high effort (else Argon, else Pro)
+hydrogen-low	newest Hydrogen, low effort (paid Google AI plans)
+hydrogen-medium (hydrogen-med)	newest Hydrogen, medium effort
+hydrogen (hydrogen-high)	newest Hydrogen, high effort
+hydrogen-xhigh (hydrogen-extra)	newest Hydrogen, extra-high effort
+carbon	newest Carbon, highest effort offered (Google AI Ultra plans)
+carbon-low	newest Carbon, low effort
+carbon-medium (carbon-med)	newest Carbon, medium effort
+carbon-high	newest Carbon, high effort
 flash-low	newest Flash, low effort
 flash-medium (flash-med)	newest Flash, medium effort
 flash (flash-high)	newest Flash, high effort
 pro-low	newest Pro, low effort
 pro-medium (pro-med)	newest Pro, medium effort
 pro (pro-high)	newest Pro, high effort
-argon	newest Argon, highest effort offered (Google AI Ultra plans)
+argon	newest Argon, highest effort offered (Google AI Pro and Ultra plans)
 argon-low	newest Argon, low effort
 argon-medium (argon-med)	newest Argon, medium effort
 argon-high	newest Argon, high effort
@@ -525,7 +563,7 @@ opus-medium (opus-med)	newest Claude Opus, medium effort
 opus-high	newest Claude Opus, high effort
 haiku (claude-haiku)	newest Claude Haiku, if your plan offers one
 gpt-oss (gpt-oss-120b)	newest GPT-OSS
-gemini	newest Gemini of any family
+gemini	newest Gemini of any family, Carbon/Argon/Pro on a tie
 claude	newest Claude of any family, Opus on a tie
 ALIASES
 }
@@ -598,6 +636,27 @@ task_default() {
   profile_load
   TASK_DEFAULT="$(_profile_default "$PROFILE" "$task")"
   TASK_DEFAULT_FROM="$PROFILE profile default for $task"
+  _claude_default_fallback
+}
+
+# Every caller of task_default resolves the answer in agy's catalogue. A Claude
+# default there needs a plan that offers Claude: the free plan lost it when
+# Antigravity withdrew Claude 4.6, and a trial of Google AI Pro gets no Claude
+# 5.5. Rather than fail, a profile default moves to Hydrogen, the everyday
+# Gemini, or Flash where the plan has no Hydrogen either. It stays put when the
+# catalogue is unavailable, so the usual "does not resolve" note still fires,
+# and a default.<task> line is the user's own choice and never moves.
+_claude_default_fallback() {
+  case "$TASK_DEFAULT" in opus|sonnet) : ;; *) return 0 ;; esac
+  [ -z "$(_resolve_soft "$TASK_DEFAULT")" ] || return 0
+  local fb
+  for fb in hydrogen flash; do
+    if [ -n "$(_resolve_soft "$fb")" ]; then
+      TASK_DEFAULT_FROM="$TASK_DEFAULT_FROM; your plan offers no Claude $TASK_DEFAULT, so $fb"
+      TASK_DEFAULT="$fb"
+      return 0
+    fi
+  done
 }
 
 # Which runner second-opinion uses when --via is not given.
@@ -658,8 +717,26 @@ resolve_model() {
   # 3. Built-in intent alias resolved against the live catalogue.
   local spec
   if spec="$(builtin_alias_spec "$input" 2>/dev/null)" && [ -n "$spec" ]; then
-    local family="${spec%%|*}" effort="${spec#*|}" rc=0 c
-    _resolve_family "$family" "$effort" || rc=$?
+    local families="${spec%%|*}" effort="${spec#*|}" family rc=1 c
+    local skipped_rc=1 skipped_family="" skipped_candidates=""
+    # Try each family in turn. One the catalogue lacks (1), or has only as a
+    # preview (3), passes to the next; the preview is reported only if no
+    # family resolves. Variants the wrapper cannot read (2) stop the search:
+    # moving on to an older family there would hide the problem.
+    local fams=()
+    IFS=',' read -r -a fams <<<"$families"
+    for family in "${fams[@]}"; do
+      rc=0
+      _resolve_family "$family" "$effort" || rc=$?
+      [ "$rc" -eq 0 ] && [ -n "$FAMILY_ID" ] && break
+      [ "$rc" -eq 2 ] && break
+      if [ "$rc" -eq 3 ] && [ "$skipped_rc" -ne 3 ]; then
+        skipped_rc=3; skipped_family="$family"; skipped_candidates="$FAMILY_CANDIDATES"
+      fi
+    done
+    if [ "$rc" -ne 0 ] && [ "$rc" -ne 2 ] && [ "$skipped_rc" -eq 3 ]; then
+      rc=3; family="$skipped_family"; FAMILY_CANDIDATES="$skipped_candidates"
+    fi
     if [ "$rc" -eq 0 ] && [ -n "$FAMILY_ID" ]; then
       local look
       if look="$(catalogue_lookup "$FAMILY_ID" 2>/dev/null)" && [ -n "$look" ]; then
@@ -674,7 +751,7 @@ resolve_model() {
     fi
     if [ "$rc" -eq 2 ]; then
       echo "error: alias '$input' asks for $effort-effort $family, but the newest $family models" >&2
-      if grep -qiE -- '-(low|medium|high)$' <<<"$FAMILY_CANDIDATES"; then
+      if grep -qiE -- '-(low|medium|high|xhigh|max)$' <<<"$FAMILY_CANDIDATES"; then
         echo "       have no '$effort' variant, so the wrapper will not guess:" >&2
       else
         echo "       do not name their variants low/medium/high, so the wrapper will not guess:" >&2
@@ -715,12 +792,12 @@ resolve_model() {
 validate_effort() {
   local e; e="$(_lower "${1:-}")"
   case "$e" in
-    low|medium|high) printf '%s' "$e" ;;
+    low|medium|high|xhigh|max) printf '%s' "$e" ;;
     "")
-      echo "error: --effort requires a value (low, medium or high)" >&2
+      echo "error: --effort requires a value (low, medium, high, xhigh or max)" >&2
       exit 64 ;;
     *)
-      echo "error: invalid --effort '$1' (expected low, medium or high)" >&2
+      echo "error: invalid --effort '$1' (expected low, medium, high, xhigh or max)" >&2
       exit 64 ;;
   esac
 }
@@ -1707,7 +1784,7 @@ _resolve_soft_full() {
 
 # Flash models return 503 "no capacity" intermittently, and a plan's Claude
 # quota runs out, so a capacity failure retries down a chain. A Claude model
-# tries the other Claude family first, then Pro, then Flash. It never falls
+# tries the other Claude family first, then the deep tier, then balanced. It never falls
 # back to the claude CLI: the point of running Claude through agy is that the
 # user's own Claude subscription is not spent. The fallbacks are *aliases*,
 # resolved against the live catalogue like everything else — no version is
@@ -1720,7 +1797,7 @@ _offload_chain() {
     *opus*)   alts="sonnet deep balanced" ;;
     *sonnet*) alts="opus deep balanced" ;;
     *claude*) alts="sonnet deep balanced" ;;
-    *)        alts="flash-medium pro-low" ;;
+    *)        alts="hydrogen-medium flash-medium pro-low" ;;
   esac
   for alt in $alts; do
     id="$(_resolve_soft "$alt")"
@@ -1734,7 +1811,7 @@ _offload_chain() {
 
 _offload_usage() {
   cat >&2 <<'USAGE'
-usage: agy-run.sh offload [--model <alias|id>] [--effort low|medium|high]
+usage: agy-run.sh offload [--model <alias|id>] [--effort low..max]
                           [--dir <path>] [--add-dir <path>]... [--label <name>]
                           [--budget <seconds>] [--timeout <duration>]
                           [--stdin] [--no-fallback] [--no-map] [--raw]
@@ -2459,12 +2536,7 @@ _second_opinion_via_agy() {
     opus:*|sonnet:*)
       [ "$effort_seen" = "0" ] || echo "[wrapper] note: agy has no '$effort' variant of $model; using its highest effort." >&2 ;;
     *)
-      if [ "$effort_seen" = "1" ]; then
-        case "$effort" in
-          low|medium|high) fwd+=(--effort "$effort") ;;
-          *) echo "[wrapper] note: --effort $effort does not apply through agy; ignoring it." >&2 ;;
-        esac
-      fi ;;
+      [ "$effort_seen" = "0" ] || fwd+=(--effort "$effort") ;;
   esac
   if [ "$budget" -lt 60 ]; then budget=60; fi
   fwd+=(--model "$model" --for second-opinion --dir "$dir" --label "second opinion" --budget "$budget")

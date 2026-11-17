@@ -24,14 +24,16 @@ Show the output as-is. Any other argument: say the profile is `claude` or
 
 What the profiles mean, if the user asks:
 
-- `gemini` (default) — offload and review use Flash (`balanced`); ask,
+- `gemini` (default) — offload and review use Hydrogen, or Flash on the free plan (`balanced`); ask,
   delegate and research use agy's own default; `/agy-bridge:second-opinion` runs a
   fresh Claude Code on the user's Claude plan.
 - `claude` — offload, ask and delegate use Sonnet inside agy; review and
   research use Opus; `/agy-bridge:second-opinion` runs Opus inside agy. All of it
-  spends the Google plan's quota. A Claude model that runs out of capacity
-  falls back to the other Claude family, then Pro, then Flash — never to the
-  claude CLI.
+  spends the Google plan's quota. On a plan with no Claude in agy (the free
+  plan, a Google AI Pro trial) those defaults use Hydrogen, or Flash where
+  there is no Hydrogen. A Claude model that runs out of capacity falls back
+  to the other Claude family, then the `deep` tier, then `balanced` — never
+  to the claude CLI.
 - An explicit `--model` always wins. Per-task overrides such as
   `default.offload = opus-medium` and `second-opinion.via = claude` go in the
   config file the output names.

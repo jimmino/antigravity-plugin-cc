@@ -7,12 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **The tiers move to Gemini 4.** `fast` and `balanced` now resolve to the
+  newest Gemini Hydrogen (Low and High), and `deep` to the newest Gemini
+  Carbon (High). Each tier falls back when the plan lacks the new family:
+  `fast` and `balanced` to Flash (the free plan), `deep` to Argon and then
+  Pro. Because `balanced` is the `gemini` profile's default for offload and
+  review, those move to Hydrogen too. An alias spec may now list several
+  families, tried in order.
+- **`gemini` prefers the deep family on a tie.** Within the newest
+  generation it picks Carbon, then Argon, then Pro, so Hydrogen's XHigh
+  variant no longer wins on effort alone.
+- **The `claude` profile works on plans without Claude.** When agy's
+  catalogue has no Opus or Sonnet (the free plan once Claude 4.6 is
+  withdrawn on 2026-11-18, or a Google AI Pro trial), the profile's defaults
+  use Hydrogen, or Flash where there is no Hydrogen, and the
+  `[wrapper] model:` line names the swap. `default.<task>` lines and an
+  explicit `--model` are left alone.
+- **The offload capacity fallback tries Hydrogen first** for a Gemini
+  primary: `hydrogen-medium`, then `flash-medium`, then `pro-low`.
+
 ### Added
+- **Gemini 4 Hydrogen and Carbon aliases.** `hydrogen-low`,
+  `hydrogen-medium` (`hydrogen-med`), `hydrogen` (`hydrogen-high`) and
+  `hydrogen-xhigh` (`hydrogen-extra`); `carbon`, `carbon-low`,
+  `carbon-medium` (`carbon-med`) and `carbon-high`. Antigravity offers
+  Hydrogen on paid Google AI Pro and Ultra plans and Carbon on AI Ultra.
+- **`--effort xhigh` and `--effort max`**, which current agy builds accept.
+  The resolver also ranks `-xhigh` and `-max` variants above `-high`.
 - **Gemini 4 Argon.** `argon`, `argon-low`, `argon-medium` (`argon-med`) and
   `argon-high` resolve to the newest Argon in the live catalogue. Antigravity
-  offers Argon on Google AI Ultra plans only; elsewhere the alias fails with
-  the list of models the catalogue does have. The exact id or display name
-  and the `gemini` alias already followed new models, and need no change.
+  offers Argon on Google AI Pro and Ultra plans; elsewhere the alias fails
+  with the list of models the catalogue does have. The exact id or display
+  name and the `gemini` alias already followed new models, and need no change.
 
 ## [0.10.0] - 2026-10-06
 

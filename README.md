@@ -210,8 +210,9 @@ viewer, not a search tool, so it reads more to find the same thing.
 
 ### Run Claude on the Google plan
 
-Google AI Pro and Ultra let `agy` run Claude models (Opus and Sonnet, in Low,
-Medium and High variants). The `claude` profile points the plugin's work at
+Paid Google AI Pro and Ultra plans let `agy` run Claude models (Opus and
+Sonnet, in Low, Medium and High variants). A Google AI Pro trial and the free
+plan get none once Claude 4.6 is withdrawn. The `claude` profile points the plugin's work at
 them, so it spends the Google plan's quota instead of your Claude
 subscription:
 
@@ -221,7 +222,7 @@ subscription:
 
 | Command | `gemini` profile (default) | `claude` profile |
 |---|---|---|
-| `/agy-bridge:offload`, `/agy-bridge:fanout` | `balanced` (Flash) | `sonnet` inside `agy` |
+| `/agy-bridge:offload`, `/agy-bridge:fanout` | `balanced` (Hydrogen, else Flash) | `sonnet` inside `agy` |
 | `/agy-bridge:review` | `balanced` | `opus` inside `agy` |
 | `/agy-bridge:ask`, `/agy-bridge:delegate` | `agy`'s own default | `sonnet` inside `agy` |
 | `/agy-bridge:research` | `agy`'s own default | `opus` inside `agy` |
@@ -236,8 +237,13 @@ default.offload = sonnet-medium
 second-opinion.via = claude
 ```
 
+If your plan offers no Claude model, the `claude` profile's defaults use
+Hydrogen instead, or Flash where there is no Hydrogen either, and the
+`[wrapper] model:` line says so. A `default.<task>` line you set yourself and
+an explicit `--model` are never swapped.
+
 When a Claude model runs out of capacity or quota, the offload path tries the
-other Claude family, then Pro, then Flash, and says so. It never falls back to
+other Claude family, then the `deep` tier, then `balanced`, and says so. It never falls back to
 the `claude` CLI. `/agy-bridge:stats` shows how the work split between the two plans.
 
 What it cannot do:
@@ -332,20 +338,30 @@ what you actually have:
 
 | Kind | Examples | Behaviour |
 |---|---|---|
-| **Intent alias** | `fast`, `balanced`, `deep`, `flash`, `pro`, `sonnet`, `opus`, `opus-low`, `sonnet-medium`, `gpt-oss`, `gemini`, `claude` | Names a *family and effort*, never a version. Resolves to the newest matching model in the live catalogue, so a new Gemini or Claude generation is picked up with no plugin update. |
+| **Intent alias** | `fast`, `balanced`, `deep`, `hydrogen`, `carbon`, `flash`, `pro`, `sonnet`, `opus`, `opus-low`, `sonnet-medium`, `gpt-oss`, `gemini`, `claude` | Names a *family and effort*, never a version. Resolves to the newest matching model in the live catalogue, so a new Gemini or Claude generation is picked up with no plugin update. |
 | **Exact id or display name** | `gemini-3.1-pro-high`, `"Claude Opus 5.5 (High)"` | Pins one specific model. Case-insensitive. |
 | **Anything else** | `my-private-endpoint` | Forwarded to `agy` untouched, so custom models defined in your `agy` settings keep working. `agy` validates it and lists the valid names if it is wrong. |
 
 The three tier aliases are the ones worth learning:
 
-- `fast` — newest Flash at low effort. Wide, shallow sweeps.
-- `balanced` — newest Flash at high effort. The workhorse.
-- `deep` — newest Pro at high effort. Bounded, careful reads.
+- `fast` — newest Hydrogen at low effort. Wide, shallow sweeps.
+- `balanced` — newest Hydrogen at high effort. The workhorse.
+- `deep` — newest Carbon at high effort. Bounded, careful reads.
 
-`argon`, `argon-low`, `argon-medium` and `argon-high` select Gemini 4 Argon,
-which Antigravity offers on Google AI Ultra plans only. On other plans the
-catalogue has no Argon and the alias fails with the list of models that exist.
-`gemini` moves to Argon by itself once the catalogue lists it.
+Each tier falls back to an older family when your plan lacks the new one:
+`fast` and `balanced` use Flash where there is no Hydrogen (the free plan),
+and `deep` tries Carbon, then Argon, then Pro. Antigravity offers Hydrogen on
+paid Google AI Pro and Ultra plans, Argon on AI Pro and Ultra, and Carbon on
+AI Ultra only.
+
+`hydrogen-low`, `hydrogen-medium`, `hydrogen` (`hydrogen-high`) and
+`hydrogen-xhigh` (`hydrogen-extra`) select Gemini 4 Hydrogen, the fast
+everyday model. `carbon`, `carbon-low`, `carbon-medium` and `carbon-high`
+select Gemini 4 Carbon, the most capable one. `argon`, `argon-low`,
+`argon-medium` and `argon-high` select Gemini 4 Argon. Without the family in
+your catalogue these fail with the list of models that exist. `gemini` picks
+the newest generation and, within it, Carbon, then Argon, then Pro, never the
+fast Hydrogen.
 
 Claude models in agy come in Low, Medium and High effort variants. `opus` and
 `sonnet` take the highest effort offered; `opus-low`, `opus-medium`,
@@ -353,8 +369,9 @@ Claude models in agy come in Low, Medium and High effort variants. `opus` and
 only if your plan offers a Claude Haiku, which the Google AI Pro catalogue
 currently does not.
 
-`--effort low|medium|high` picks a reasoning-effort variant independently and
-is passed straight to `agy --effort`.
+`--effort low|medium|high|xhigh|max` picks a reasoning-effort variant
+independently and is passed straight to `agy --effort`. Which levels a model
+has depends on the model: Hydrogen goes up to `xhigh`.
 
 Aliases only land on models they can vouch for:
 
