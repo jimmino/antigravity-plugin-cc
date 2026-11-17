@@ -641,8 +641,9 @@ task_default() {
 
 # Every caller of task_default resolves the answer in agy's catalogue. A Claude
 # default there needs a plan that offers Claude: the free plan lost it when
-# Antigravity withdrew Claude 4.6, and a trial of Google AI Pro gets no Claude
-# 5.5. Rather than fail, a profile default moves to Hydrogen, the everyday
+# Antigravity withdrew its older Claude models, and a trial of Google AI Pro
+# gets none of the current ones. Rather than fail, a profile default moves to
+# Hydrogen, the everyday
 # Gemini, or Flash where the plan has no Hydrogen either. It stays put when the
 # catalogue is unavailable, so the usual "does not resolve" note still fires,
 # and a default.<task> line is the user's own choice and never moves.
