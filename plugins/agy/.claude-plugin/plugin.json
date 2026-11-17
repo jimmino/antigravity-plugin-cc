@@ -1,6 +1,6 @@
 {
   "name": "agy-bridge",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "Use Google's Antigravity CLI (`agy`) from Claude Code: offload bulk reads read-only and get a short cited answer back, delegate tasks, review the current diff, ask for a second opinion, and optionally run the work on the Claude models agy offers, on your Google plan instead of your Claude subscription. Model names come from `agy models` at runtime. Forked from simplybychris/antigravity-plugin-cc.",
   "author": {
     "name": "jimmino",

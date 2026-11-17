@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-17
+
 ### Changed
 - **The tiers move to Gemini 4.** `fast` and `balanced` now resolve to the
   newest Gemini Hydrogen (Low and High), and `deep` to the newest Gemini
