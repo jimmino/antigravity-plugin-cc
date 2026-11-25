@@ -6,13 +6,13 @@
   },
   "metadata": {
     "description": "Antigravity CLI integration for Claude Code — use Google's `agy` from inside your editor. Forked from simplybychris/antigravity-plugin-cc.",
-    "version": "0.11.0"
+    "version": "0.12.0"
   },
   "plugins": [
     {
       "name": "agy-bridge",
       "description": "Use Google's Antigravity CLI (`agy`) from Claude Code: offload bulk reads read-only and get a short cited answer back, delegate tasks, review the current diff, ask for a second opinion, and optionally run the work on the Claude models agy offers, on your Google plan instead of your Claude subscription. Commands are /agy-bridge:*. Named `agy` before 0.10.0. Forked from simplybychris/antigravity-plugin-cc.",
-      "version": "0.11.0",
+      "version": "0.12.0",
       "author": {
         "name": "jimmino",
         "url": "https://github.com/jimmino"

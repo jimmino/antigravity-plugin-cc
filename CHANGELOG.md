@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-11-25
+
 ### Added
 - **Gemini 4 Neon.** `neon-low`, `neon-medium` (`neon-med`), `neon`
   (`neon-high`) and `neon-xhigh` (`neon-extra`) resolve to the newest Neon in
