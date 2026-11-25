@@ -50,7 +50,7 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" models
    and therefore follow new releases automatically:
    `fast`, `balanced`, `deep`, `hydrogen-low`, `hydrogen-medium`,
    `hydrogen`, `hydrogen-xhigh`, `carbon`, `carbon-low`, `carbon-medium`,
-   `carbon-high`, `flash-low`, `flash-medium`, `flash`,
+   `carbon-high`, `neon-low`, `neon-medium`, `neon`, `neon-xhigh`, `flash-low`, `flash-medium`, `flash`,
    `pro-low`, `pro-medium`, `pro`, `argon`, `argon-low`, `argon-medium`,
    `argon-high`, `sonnet`, `sonnet-low`, `sonnet-medium`,
    `sonnet-high`, `opus`, `opus-low`, `opus-medium`, `opus-high`, `haiku`,

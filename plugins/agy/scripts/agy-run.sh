@@ -386,13 +386,13 @@ _resolve_family() {
   fi
 
   # `gemini` means the newest, most capable Gemini. One generation ships
-  # several families (Carbon, Argon, Hydrogen), and the effort tie-break alone
+  # several families (Carbon, Neon, Argon, Hydrogen), and the effort tie-break alone
   # would hand it to Hydrogen's XHigh, the fast tier. The deep families win
   # the tie, in the order Antigravity ranks them.
   if [ "$family" = "gemini" ]; then
     local newest_gen deep_one
     newest_gen="$(printf '%s\n' "$ids" | _newest_version_ids)"
-    for deep_one in carbon argon pro; do
+    for deep_one in carbon neon argon pro; do
       if grep -qi -- "$deep_one" <<<"$newest_gen"; then
         ids="$(grep -i -- "$deep_one" <<<"$newest_gen")"
         break
@@ -495,7 +495,7 @@ builtin_alias_spec() {
   case "$(_lower "${1:-}")" in
     fast)                     echo "hydrogen,flash|low" ;;
     balanced)                 echo "hydrogen,flash|high" ;;
-    deep)                     echo "carbon,argon,pro|high" ;;
+    deep)                     echo "carbon,neon,argon,pro|high" ;;
     hydrogen-low)             echo "hydrogen|low" ;;
     hydrogen-medium|hydrogen-med) echo "hydrogen|medium" ;;
     hydrogen|hydrogen-high)   echo "hydrogen|high" ;;
@@ -504,6 +504,10 @@ builtin_alias_spec() {
     carbon-low)               echo "carbon|low" ;;
     carbon-medium|carbon-med) echo "carbon|medium" ;;
     carbon-high)              echo "carbon|high" ;;
+    neon-low)                 echo "neon|low" ;;
+    neon-medium|neon-med)     echo "neon|medium" ;;
+    neon|neon-high)           echo "neon|high" ;;
+    neon-xhigh|neon-extra)    echo "neon|xhigh" ;;
     flash-low)                echo "flash|low" ;;
     flash-medium|flash-med)   echo "flash|medium" ;;
     flash|flash-high)         echo "flash|high" ;;
@@ -534,15 +538,19 @@ builtin_alias_names() {
   cat <<'ALIASES'
 fast	newest Hydrogen, low effort (Flash if your plan has no Hydrogen)
 balanced	newest Hydrogen, high effort (Flash if your plan has no Hydrogen)
-deep	newest Carbon, high effort (else Argon, else Pro)
+deep	newest Carbon, high effort (else Neon, else Argon, else Pro)
 hydrogen-low	newest Hydrogen, low effort (paid Google AI plans)
 hydrogen-medium (hydrogen-med)	newest Hydrogen, medium effort
 hydrogen (hydrogen-high)	newest Hydrogen, high effort
 hydrogen-xhigh (hydrogen-extra)	newest Hydrogen, extra-high effort
-carbon	newest Carbon, highest effort offered (Google AI Ultra plans)
+carbon	newest Carbon, highest effort offered (Google AI Pro and Ultra plans)
 carbon-low	newest Carbon, low effort
 carbon-medium (carbon-med)	newest Carbon, medium effort
 carbon-high	newest Carbon, high effort
+neon-low	newest Neon, low effort (Google AI Pro and Ultra plans)
+neon-medium (neon-med)	newest Neon, medium effort
+neon (neon-high)	newest Neon, high effort
+neon-xhigh (neon-extra)	newest Neon, extra-high effort
 flash-low	newest Flash, low effort
 flash-medium (flash-med)	newest Flash, medium effort
 flash (flash-high)	newest Flash, high effort

@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Gemini 4 Neon.** `neon-low`, `neon-medium` (`neon-med`), `neon`
+  (`neon-high`) and `neon-xhigh` (`neon-extra`) resolve to the newest Neon in
+  the live catalogue. Antigravity offers Neon, which sits between Hydrogen and
+  Carbon, on paid Google AI Pro and Ultra plans.
+
+### Changed
+- **`deep` falls back to Neon** when the plan has no Carbon, before Argon and
+  Pro. `gemini` ranks the newest generation's families Carbon, Neon, Argon,
+  Pro.
+- **Plan notes updated.** Carbon is now on Google AI Pro as well as Ultra.
+  Argon and Gemini 3.8 Flash leave Antigravity on 2026-11-30; the tier
+  fallbacks already skip a family the catalogue no longer lists.
+
 ## [0.11.0] - 2026-11-17
 
 ### Changed
