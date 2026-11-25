@@ -68,7 +68,7 @@ live `agy models` catalogue — so they follow new releases on their own. Run
 |---|---|---|
 | `fast` | newest Hydrogen, low effort (Flash on the free plan) | wide shallow sweeps, candidate lists |
 | `balanced` | newest Hydrogen, high effort (Flash on the free plan) | **the workhorse** |
-| `deep` | newest Carbon, high effort (else Argon, else Pro) | situational; see below |
+| `deep` | newest Carbon, high effort (else Neon, else Argon, else Pro) | situational; see below |
 
 Without `--model`, the profile picks the tier (`/agy-bridge:profile`): `balanced`
 under `gemini`, `sonnet` inside agy under `claude`.

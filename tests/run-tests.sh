@@ -309,11 +309,15 @@ t_alias_argon_absent_on_plans_without_it() {
 }
 
 # The Gemini 4 line-up on a paid plan: Hydrogen is the fast tier, Carbon the
-# deepest, Argon in between. Ids follow agy's "gemini-4-<family>-<effort>".
+# deepest, Neon and Argon in between. Ids follow agy's "gemini-4-<family>-<effort>".
 use_gemini4_catalog() {
   use_catalog 'gemini-4-carbon-high|Gemini 4 Carbon (High)' \
               'gemini-4-carbon-medium|Gemini 4 Carbon (Medium)' \
               'gemini-4-carbon-low|Gemini 4 Carbon (Low)' \
+              'gemini-4-neon-xhigh|Gemini 4 Neon (Extra High)' \
+              'gemini-4-neon-high|Gemini 4 Neon (High)' \
+              'gemini-4-neon-medium|Gemini 4 Neon (Medium)' \
+              'gemini-4-neon-low|Gemini 4 Neon (Low)' \
               'gemini-4-argon-high|Gemini 4 Argon (High)' \
               'gemini-4-argon-low|Gemini 4 Argon (Low)' \
               'gemini-4-hydrogen-xhigh|Gemini 4 Hydrogen (Extra)' \
@@ -355,6 +359,33 @@ t_tiers_fall_back_by_plan() {
   run_wrapper ask --model deep "hi"
   assert_eq 64 "$RC" "deep with no deep family at all is a usage error"
   assert_contains "$ERR" "matches no model in the current catalogue" "the error says why"
+}
+
+t_tiers_deep_falls_back_to_neon() {
+  # A plan with Neon and Hydrogen but no Carbon (and Argon withdrawn).
+  use_catalog 'gemini-4-neon-xhigh|Gemini 4 Neon (Extra High)' \
+              'gemini-4-neon-high|Gemini 4 Neon (High)' \
+              'gemini-4-neon-low|Gemini 4 Neon (Low)' \
+              'gemini-4-hydrogen-xhigh|Gemini 4 Hydrogen (Extra)' \
+              'gemini-4-hydrogen-high|Gemini 4 Hydrogen (High)'
+  run_wrapper ask --model deep "hi"
+  argv_has "gemini-4-neon-high" || fail_msg "deep without Carbon => high-effort Neon; argv: $(argv_log | tr '\n' ' ')"
+  run_wrapper ask --model gemini "hi"
+  argv_has "gemini-4-neon-xhigh" || fail_msg "gemini without Carbon => Neon, not Hydrogen; argv: $(argv_log | tr '\n' ' ')"
+}
+
+t_alias_neon() {
+  use_gemini4_catalog
+  run_wrapper ask --model neon "hi"
+  argv_has "gemini-4-neon-high" || fail_msg "neon => High, agy's default level; argv: $(argv_log | tr '\n' ' ')"
+  run_wrapper ask --model neon-extra "hi"
+  argv_has "gemini-4-neon-xhigh" || fail_msg "neon-extra => XHigh; argv: $(argv_log | tr '\n' ' ')"
+  run_wrapper ask --model neon-med "hi"
+  argv_has "gemini-4-neon-medium" || fail_msg "neon-med => Medium; argv: $(argv_log | tr '\n' ' ')"
+  run_wrapper ask --model neon-low "hi"
+  argv_has "gemini-4-neon-low" || fail_msg "neon-low => Low; argv: $(argv_log | tr '\n' ' ')"
+  run_wrapper ask --model deep "hi"
+  argv_has "gemini-4-carbon-high" || fail_msg "deep still prefers Carbon over Neon; argv: $(argv_log | tr '\n' ' ')"
 }
 
 t_tiers_skip_a_preview_only_family() {
@@ -2430,6 +2461,8 @@ it "alias: argon fails clearly when the plan lacks it"  t_alias_argon_absent_on_
 it "tiers: fast/balanced on Hydrogen, deep on Carbon"   t_tiers_move_to_hydrogen_and_carbon
 it "tiers: fall back to Argon, Flash by plan"           t_tiers_fall_back_by_plan
 it "tiers: a preview-only family passes to the next"    t_tiers_skip_a_preview_only_family
+it "tiers: deep falls back to Neon without Carbon"      t_tiers_deep_falls_back_to_neon
+it "alias: neon effort variants"                        t_alias_neon
 it "alias: hydrogen and carbon effort variants"         t_alias_hydrogen_and_carbon
 it "alias: gemini prefers Carbon over Hydrogen XHigh"   t_alias_gemini_prefers_the_deep_family
 it "alias: pro-medium names the variants that exist"    t_alias_missing_effort_names_the_variants

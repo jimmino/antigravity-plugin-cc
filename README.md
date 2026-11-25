@@ -338,7 +338,7 @@ what you actually have:
 
 | Kind | Examples | Behaviour |
 |---|---|---|
-| **Intent alias** | `fast`, `balanced`, `deep`, `hydrogen`, `carbon`, `flash`, `pro`, `sonnet`, `opus`, `opus-low`, `sonnet-medium`, `gpt-oss`, `gemini`, `claude` | Names a *family and effort*, never a version. Resolves to the newest matching model in the live catalogue, so a new Gemini or Claude generation is picked up with no plugin update. |
+| **Intent alias** | `fast`, `balanced`, `deep`, `hydrogen`, `neon`, `carbon`, `flash`, `pro`, `sonnet`, `opus`, `opus-low`, `sonnet-medium`, `gpt-oss`, `gemini`, `claude` | Names a *family and effort*, never a version. Resolves to the newest matching model in the live catalogue, so a new Gemini or Claude generation is picked up with no plugin update. |
 | **Exact id or display name** | `gemini-3.1-pro-high`, `"Claude Opus 5.5 (High)"` | Pins one specific model. Case-insensitive. |
 | **Anything else** | `my-private-endpoint` | Forwarded to `agy` untouched, so custom models defined in your `agy` settings keep working. `agy` validates it and lists the valid names if it is wrong. |
 
@@ -350,17 +350,20 @@ The three tier aliases are the ones worth learning:
 
 Each tier falls back to an older family when your plan lacks the new one:
 `fast` and `balanced` use Flash where there is no Hydrogen (the free plan),
-and `deep` tries Carbon, then Argon, then Pro. Antigravity offers Hydrogen on
-paid Google AI Pro and Ultra plans, Argon on AI Pro and Ultra, and Carbon on
-AI Ultra only.
+and `deep` tries Carbon, then Neon, then Argon, then Pro. Antigravity offers
+Hydrogen, Neon and Carbon on paid Google AI Pro and Ultra plans. Argon leaves
+Antigravity on 2026-11-30, along with Gemini 3.8 Flash; the fallbacks skip a
+family the catalogue no longer lists.
 
 `hydrogen-low`, `hydrogen-medium`, `hydrogen` (`hydrogen-high`) and
 `hydrogen-xhigh` (`hydrogen-extra`) select Gemini 4 Hydrogen, the fast
 everyday model. `carbon`, `carbon-low`, `carbon-medium` and `carbon-high`
-select Gemini 4 Carbon, the most capable one. `argon`, `argon-low`,
+select Gemini 4 Carbon, the most capable one. `neon-low`, `neon-medium`,
+`neon` (`neon-high`) and `neon-xhigh` (`neon-extra`) select Gemini 4 Neon,
+which sits between Hydrogen and Carbon. `argon`, `argon-low`,
 `argon-medium` and `argon-high` select Gemini 4 Argon. Without the family in
 your catalogue these fail with the list of models that exist. `gemini` picks
-the newest generation and, within it, Carbon, then Argon, then Pro, never the
+the newest generation and, within it, Carbon, then Neon, then Argon, then Pro, never the
 fast Hydrogen.
 
 Claude models in agy come in Low, Medium and High effort variants. `opus` and
