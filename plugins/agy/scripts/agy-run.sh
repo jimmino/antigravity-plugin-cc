@@ -344,9 +344,14 @@ _version_keyed() {
 # id or display name still reaches them, and AGY_ALLOW_PREVIEW=1 lets aliases
 # consider them too. The id and the label are both checked, since a catalogue
 # may mark a preview in only one of them.
+# Orchestrator entries ("Orchestrator (Neon)", ids such as
+# gemini-pro-orchestrator-argon) are a planner paired with an executor model,
+# not one model. Their ids carry family words ("pro", "argon") but no effort,
+# so a family alias would land on them; only an exact id reaches them.
 _alias_candidate_ids() {
   catalogue | awk -F'\t' -v allow="${AGY_ALLOW_PREVIEW:-0}" '
     NF >= 2 {
+      if (tolower($1 " " $2) ~ /orchestrator/) next
       if (allow != "1") {
         s = " " tolower($1 " " $2) " "
         if (s ~ /[^a-z](preview|exp|experimental|beta|alpha|nightly|canary)[^a-z]/) next
@@ -372,7 +377,7 @@ _resolve_family() {
   local ids
   ids="$(_alias_candidate_ids | grep -iE -- "$family" || true)"
   if [ -z "$ids" ]; then
-    FAMILY_CANDIDATES="$(catalogue_ids | grep -iE -- "$family" || true)"
+    FAMILY_CANDIDATES="$(catalogue_ids | grep -iE -- "$family" | grep -iv -- 'orchestrator' || true)"
     [ -n "$FAMILY_CANDIDATES" ] && return 3
     return 1
   fi

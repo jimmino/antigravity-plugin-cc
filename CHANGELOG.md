@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-11-27
+
+### Fixed
+- **Family aliases skip Orchestrator entries.** agy now lists Orchestrator
+  modes (`gemini-pro-orchestrator`, `-neon`, `-argon`) beside the models.
+  `argon` with no effort landed on `gemini-pro-orchestrator-argon`, and
+  `pro` stopped with an "unreadable variants" error that also cut the
+  `deep` fallback short. Aliases now ignore them; `pro` reports that the
+  catalogue has no Pro. An exact Orchestrator id still works.
+
 ## [0.12.0] - 2026-11-25
 
 ### Added

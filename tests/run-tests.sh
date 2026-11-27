@@ -388,6 +388,27 @@ t_alias_neon() {
   argv_has "gemini-4-carbon-high" || fail_msg "deep still prefers Carbon over Neon; argv: $(argv_log | tr '\n' ' ')"
 }
 
+t_aliases_skip_orchestrator_entries() {
+  # agy lists Orchestrator modes beside the models. Their ids name "pro" and
+  # a family but carry no effort, so family aliases must not land on them.
+  use_catalog 'gemini-4-carbon-high|Gemini 4 Carbon (High)' \
+              'gemini-4-argon-high|Gemini 4 Argon (High)' \
+              'gemini-4-argon-low|Gemini 4 Argon (Low)' \
+              'gemini-4-hydrogen-medium|Gemini 4 Hydrogen (Medium)' \
+              'gemini-pro-orchestrator-neon|Orchestrator (Neon)' \
+              'gemini-pro-orchestrator|Orchestrator (Carbon)' \
+              'gemini-pro-orchestrator-argon|Orchestrator (Argon)'
+  run_wrapper ask --model argon "hi"
+  argv_has "gemini-4-argon-high" || fail_msg "argon => the Argon model, not its Orchestrator; argv: $(argv_log | tr '\n' ' ')"
+  run_wrapper ask --model carbon "hi"
+  argv_has "gemini-4-carbon-high" || fail_msg "carbon => the Carbon model; argv: $(argv_log | tr '\n' ' ')"
+  run_wrapper ask --model pro "hi"
+  assert_eq 64 "$RC" "pro with only Orchestrator ids is a usage error"
+  assert_contains "$ERR" "matches no model in the current catalogue" "and says Pro is absent, not unreadable"
+  run_wrapper ask --model gemini-pro-orchestrator-argon "hi"
+  argv_has "gemini-pro-orchestrator-argon" || fail_msg "an exact Orchestrator id still passes; argv: $(argv_log | tr '\n' ' ')"
+}
+
 t_tiers_skip_a_preview_only_family() {
   use_catalog 'gemini-4-hydrogen-preview-high|Gemini 4 Hydrogen Preview (High)' \
               'gemini-3.8-flash-high|Gemini 3.8 Flash (High)'
@@ -2463,6 +2484,7 @@ it "tiers: fall back to Argon, Flash by plan"           t_tiers_fall_back_by_pla
 it "tiers: a preview-only family passes to the next"    t_tiers_skip_a_preview_only_family
 it "tiers: deep falls back to Neon without Carbon"      t_tiers_deep_falls_back_to_neon
 it "alias: neon effort variants"                        t_alias_neon
+it "alias: family aliases skip Orchestrator entries"    t_aliases_skip_orchestrator_entries
 it "alias: hydrogen and carbon effort variants"         t_alias_hydrogen_and_carbon
 it "alias: gemini prefers Carbon over Hydrogen XHigh"   t_alias_gemini_prefers_the_deep_family
 it "alias: pro-medium names the variants that exist"    t_alias_missing_effort_names_the_variants
